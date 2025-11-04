@@ -32,13 +32,26 @@ export default function RegisterPage() {
 
     setLoading(true);
 
-    const { error } = await signUp(email, password);
+    try {
+      console.log('Attempting to sign up...');
+      const { data, error } = await signUp(email, password);
 
-    if (error) {
-      setError(error.message);
+      if (error) {
+        console.error('Sign up error:', error);
+        setError(error.message);
+        setLoading(false);
+      } else if (data?.user) {
+        console.log('Sign up successful, redirecting to dashboard...');
+        router.push('/dashboard');
+      } else {
+        console.error('Sign up returned no user data');
+        setError('Sign up failed. Please try again.');
+        setLoading(false);
+      }
+    } catch (err) {
+      console.error('Unexpected error during sign up:', err);
+      setError('An unexpected error occurred. Please try again.');
       setLoading(false);
-    } else {
-      router.push('/dashboard');
     }
   };
 
