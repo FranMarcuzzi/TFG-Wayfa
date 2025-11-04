@@ -21,24 +21,16 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      console.log('Attempting to sign in...');
-      const { data, error } = await signIn(email, password);
+      const result = await signIn(email, password);
 
-      if (error) {
-        console.error('Sign in error:', error);
-        setError(error.message);
+      if (result.error) {
+        setError(result.error.message);
         setLoading(false);
-      } else if (data?.session) {
-        console.log('Sign in successful, redirecting to dashboard...');
-        router.push('/dashboard');
       } else {
-        console.error('Sign in returned no session');
-        setError('Login failed. Please try again.');
-        setLoading(false);
+        router.push('/dashboard');
       }
     } catch (err) {
-      console.error('Unexpected error during sign in:', err);
-      setError('An unexpected error occurred. Please try again.');
+      setError('Failed to sign in. Please try again.');
       setLoading(false);
     }
   };
