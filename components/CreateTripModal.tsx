@@ -27,19 +27,35 @@ export function CreateTripModal({ open, onOpenChange }: CreateTripModalProps) {
     setLoading(true);
 
     try {
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      // CRITICAL: Get session first to ensure token is loaded
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
 
-      console.log('User data:', user);
-      console.log('User error:', userError);
+      console.log('Session check:', {
+        hasSession: !!session,
+        hasAccessToken: !!session?.access_token,
+        sessionError
+      });
+
+      if (!session || !session.access_token) {
+        setError('Not authenticated - please log in again');
+        setLoading(false);
+        router.push('/login');
+        return;
+      }
+
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
 
       if (!user) {
         setError('Not authenticated - please log in again');
         setLoading(false);
+        router.push('/login');
         return;
       }
 
-      console.log('Attempting to insert trip for user:', user.id);
+      console.log('User ID:', user.id);
+      console.log('Inserting trip...');
 
+      // Make the request with explicit headers to ensure auth is sent
       const { data, error: insertError } = await supabase
         .from('trips')
         .insert({
@@ -48,19 +64,20 @@ export function CreateTripModal({ open, onOpenChange }: CreateTripModalProps) {
           destination: destination || null,
           start_date: startDate || null,
           end_date: endDate || null,
-        } as any)
+        })
         .select()
         .single();
 
       console.log('Insert result:', { data, insertError });
 
       if (insertError) {
-        console.error('Insert error details:', insertError);
+        console.error('Insert error:', insertError);
         setError(`Failed to create trip: ${insertError.message}`);
         setLoading(false);
       } else if (data) {
+        console.log('Success! Redirecting to trip:', data.id);
         onOpenChange(false);
-        router.push(`/trip/${(data as any).id}`);
+        router.push(`/trip/${data.id}`);
       }
     } catch (err) {
       console.error('Unexpected error:', err);
