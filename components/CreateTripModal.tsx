@@ -26,32 +26,46 @@ export function CreateTripModal({ open, onOpenChange }: CreateTripModalProps) {
     setError('');
     setLoading(true);
 
-    const { data: { user } } = await supabase.auth.getUser();
+    try {
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
 
-    if (!user) {
-      setError('Not authenticated');
+      console.log('User data:', user);
+      console.log('User error:', userError);
+
+      if (!user) {
+        setError('Not authenticated - please log in again');
+        setLoading(false);
+        return;
+      }
+
+      console.log('Attempting to insert trip for user:', user.id);
+
+      const { data, error: insertError } = await supabase
+        .from('trips')
+        .insert({
+          owner_id: user.id,
+          title,
+          destination: destination || null,
+          start_date: startDate || null,
+          end_date: endDate || null,
+        } as any)
+        .select()
+        .single();
+
+      console.log('Insert result:', { data, insertError });
+
+      if (insertError) {
+        console.error('Insert error details:', insertError);
+        setError(`Failed to create trip: ${insertError.message}`);
+        setLoading(false);
+      } else if (data) {
+        onOpenChange(false);
+        router.push(`/trip/${(data as any).id}`);
+      }
+    } catch (err) {
+      console.error('Unexpected error:', err);
+      setError('An unexpected error occurred');
       setLoading(false);
-      return;
-    }
-
-    const { data, error: insertError } = await supabase
-      .from('trips')
-      .insert({
-        owner_id: user.id,
-        title,
-        destination: destination || null,
-        start_date: startDate || null,
-        end_date: endDate || null,
-      } as any)
-      .select()
-      .single();
-
-    if (insertError) {
-      setError(insertError.message);
-      setLoading(false);
-    } else if (data) {
-      onOpenChange(false);
-      router.push(`/trip/${(data as any).id}`);
     }
   };
 
