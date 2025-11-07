@@ -53,31 +53,27 @@ export function CreateTripModal({ open, onOpenChange }: CreateTripModalProps) {
       }
 
       console.log('User ID:', user.id);
-      console.log('Inserting trip...');
+      console.log('Creating trip via RPC function...');
 
-      // Make the request with explicit headers to ensure auth is sent
-      const { data, error: insertError } = await supabase
-        .from('trips')
-        .insert({
-          owner_id: user.id,
-          title,
-          destination: destination || null,
-          start_date: startDate || null,
-          end_date: endDate || null,
-        })
-        .select()
-        .single();
+      // Use the database function to create trip and add member
+      // This bypasses RLS issues with auth.uid()
+      const { data, error: insertError } = await (supabase.rpc as any)('create_trip_with_member', {
+        p_title: title,
+        p_destination: destination || null,
+        p_start_date: startDate || null,
+        p_end_date: endDate || null,
+      });
 
-      console.log('Insert result:', { data, insertError });
+      console.log('RPC result:', { data, insertError });
 
       if (insertError) {
         console.error('Insert error:', insertError);
         setError(`Failed to create trip: ${insertError.message}`);
         setLoading(false);
-      } else if (data) {
-        console.log('Success! Redirecting to trip:', data.id);
+      } else if (data && data.length > 0) {
+        console.log('Success! Redirecting to trip:', data[0].id);
         onOpenChange(false);
-        router.push(`/trip/${data.id}`);
+        router.push(`/trip/${data[0].id}`);
       }
     } catch (err) {
       console.error('Unexpected error:', err);
