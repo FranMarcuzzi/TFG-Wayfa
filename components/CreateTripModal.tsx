@@ -64,7 +64,7 @@ export function CreateTripModal({ open, onOpenChange }: CreateTripModalProps) {
           destination: destination || null,
           start_date: startDate || null,
           end_date: endDate || null,
-        })
+        } as any)
         .select()
         .single();
 

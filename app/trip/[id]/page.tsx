@@ -6,6 +6,7 @@ import { NavBar } from '@/components/NavBar';
 import { Itinerary } from '@/components/Itinerary';
 import { Chat } from '@/components/Chat';
 import { Polls } from '@/components/Polls';
+import { TripMembers } from '@/components/TripMembers';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 export default function TripPage() {
@@ -24,6 +25,8 @@ export default function TripPage() {
             </div>
 
             <div className="space-y-6">
+              <TripMembers tripId={tripId} />
+
               <Tabs defaultValue="chat" className="w-full">
                 <TabsList className="w-full">
                   <TabsTrigger value="chat" className="flex-1">
