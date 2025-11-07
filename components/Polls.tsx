@@ -23,6 +23,8 @@ interface Poll {
   created_at: string;
   options: PollOption[];
   userVote: string | null;
+  creator_name?: string;
+  creator_email?: string;
 }
 
 interface PollsProps {
@@ -52,7 +54,13 @@ export function Polls({ tripId }: PollsProps) {
   const loadPolls = async () => {
     const { data: pollsData } = await supabase
       .from('polls')
-      .select('*')
+      .select(`
+        *,
+        user_profiles!polls_created_by_fkey (
+          email,
+          display_name
+        )
+      `)
       .eq('trip_id', tripId)
       .order('created_at', { ascending: false });
 
@@ -97,6 +105,8 @@ export function Polls({ tripId }: PollsProps) {
             ...poll,
             options: optionsWithVotes,
             userVote,
+            creator_name: poll.user_profiles?.display_name || null,
+            creator_email: poll.user_profiles?.email || 'Unknown',
           };
         })
       );
@@ -287,7 +297,12 @@ export function Polls({ tripId }: PollsProps) {
 
             return (
               <Card key={poll.id} className="p-4">
-                <h4 className="font-medium text-gray-900 mb-3">{poll.question}</h4>
+                <div className="mb-3">
+                  <h4 className="font-medium text-gray-900">{poll.question}</h4>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Created by {poll.creator_name || poll.creator_email?.split('@')[0] || 'Unknown'}
+                  </p>
+                </div>
 
                 <div className="space-y-2">
                   {poll.options.map((option) => {

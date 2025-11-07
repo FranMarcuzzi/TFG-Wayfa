@@ -15,6 +15,8 @@ interface Message {
   author_id: string;
   content: string;
   created_at: string;
+  author_name?: string;
+  author_email?: string;
 }
 
 interface ChatProps {
@@ -55,12 +57,23 @@ export function Chat({ tripId }: ChatProps) {
   const loadMessages = async () => {
     const { data } = await supabase
       .from('messages')
-      .select('*')
+      .select(`
+        *,
+        user_profiles!messages_author_id_fkey (
+          email,
+          display_name
+        )
+      `)
       .eq('trip_id', tripId)
       .order('created_at', { ascending: true });
 
     if (data) {
-      setMessages(data);
+      const messagesWithAuthors = data.map((msg: any) => ({
+        ...msg,
+        author_name: msg.user_profiles?.display_name || null,
+        author_email: msg.user_profiles?.email || 'Unknown',
+      }));
+      setMessages(messagesWithAuthors);
     }
   };
 
@@ -152,6 +165,11 @@ export function Chat({ tripId }: ChatProps) {
                     : 'bg-gray-100 text-gray-900'
                 }`}
               >
+                {message.author_id !== currentUserId && (
+                  <div className="text-xs font-semibold mb-1 text-gray-700">
+                    {message.author_name || message.author_email?.split('@')[0] || 'Unknown'}
+                  </div>
+                )}
                 <div className="break-words">{message.content}</div>
                 <div
                   className={`text-xs mt-1 ${

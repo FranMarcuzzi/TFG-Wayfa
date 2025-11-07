@@ -20,7 +20,8 @@ interface TripMember {
   trip_id: string;
   user_id: string;
   role: 'organizer' | 'participant';
-  email?: string;
+  email: string;
+  display_name: string | null;
 }
 
 interface TripMembersProps {
@@ -63,30 +64,30 @@ export function TripMembers({ tripId }: TripMembersProps) {
     try {
       const { data, error } = await supabase
         .from('trip_members')
-        .select('trip_id, user_id, role')
+        .select(`
+          trip_id,
+          user_id,
+          role,
+          user_profiles (
+            email,
+            display_name
+          )
+        `)
         .eq('trip_id', tripId)
         .order('role', { ascending: true });
 
       if (error) throw error;
 
-      // For each member, try to get their email from auth.users
-      const membersWithEmails = await Promise.all(
-        (data || []).map(async (member) => {
-          // Try to get user profile/email
-          const { data: userData } = await supabase
-            .from('trip_members')
-            .select('user_id')
-            .eq('user_id', member.user_id)
-            .single();
+      // Map the data to include user profile info
+      const membersWithProfiles = (data || []).map((member: any) => ({
+        trip_id: member.trip_id,
+        user_id: member.user_id,
+        role: member.role,
+        email: member.user_profiles?.email || 'Unknown User',
+        display_name: member.user_profiles?.display_name || null,
+      }));
 
-          return {
-            ...member,
-            email: `user-${member.user_id.substring(0, 8)}`, // Fallback display
-          };
-        })
-      );
-
-      setMembers(membersWithEmails);
+      setMembers(membersWithProfiles);
     } catch (error) {
       console.error('Error loading members:', error);
     } finally {
@@ -188,8 +189,17 @@ export function TripMembers({ tripId }: TripMembersProps) {
     return role === 'organizer' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800';
   };
 
-  const getInitials = (email: string) => {
-    return email.substring(0, 2).toUpperCase();
+  const getInitials = (name: string) => {
+    if (!name) return 'U';
+    const parts = name.split(' ');
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[1][0]).toUpperCase();
+    }
+    return name.substring(0, 2).toUpperCase();
+  };
+
+  const getDisplayName = (member: TripMember) => {
+    return member.display_name || member.email.split('@')[0];
   };
 
   return (
@@ -277,19 +287,22 @@ export function TripMembers({ tripId }: TripMembersProps) {
                 <div className="flex items-center gap-3">
                   <Avatar>
                     <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white">
-                      {getInitials(member.email || '')}
+                      {getInitials(getDisplayName(member))}
                     </AvatarFallback>
                   </Avatar>
                   <div>
                     <p className="text-sm font-medium text-gray-900">
-                      {member.email}
+                      {getDisplayName(member)}
                       {member.user_id === currentUserId && (
                         <span className="text-gray-500 ml-1">(You)</span>
                       )}
                     </p>
-                    <Badge variant="secondary" className={getRoleBadgeColor(member.role)}>
-                      {member.role}
-                    </Badge>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="secondary" className={getRoleBadgeColor(member.role)}>
+                        {member.role}
+                      </Badge>
+                      <span className="text-xs text-gray-500">{member.email}</span>
+                    </div>
                   </div>
                 </div>
                 {isOrganizer && member.user_id !== currentUserId && (
