@@ -23,6 +23,17 @@ export function TripList() {
 
   useEffect(() => {
     loadTrips();
+
+    // Listen for invitation acceptance to reload trips
+    const handleInvitationAccepted = () => {
+      loadTrips();
+    };
+
+    window.addEventListener('trip-invitation-accepted', handleInvitationAccepted);
+
+    return () => {
+      window.removeEventListener('trip-invitation-accepted', handleInvitationAccepted);
+    };
   }, []);
 
   const loadTrips = async () => {
@@ -30,9 +41,24 @@ export function TripList() {
 
     if (!user) return;
 
+    // Get only trips where the user is a member
+    const { data: memberTrips } = await supabase
+      .from('trip_members')
+      .select('trip_id')
+      .eq('user_id', user.id);
+
+    if (!memberTrips || memberTrips.length === 0) {
+      setTrips([]);
+      setLoading(false);
+      return;
+    }
+
+    const tripIds = memberTrips.map((m) => m.trip_id);
+
     const { data } = await supabase
       .from('trips')
       .select('*')
+      .in('id', tripIds)
       .order('created_at', { ascending: false });
 
     if (data) {

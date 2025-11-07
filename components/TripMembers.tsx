@@ -107,25 +107,57 @@ export function TripMembers({ tripId }: TripMembersProps) {
         return;
       }
 
-      // In a real app, you would:
-      // 1. Send an email invitation
-      // 2. Create a pending invitation record
-      // 3. When user signs up with that email, auto-add them to trip
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        setInviteError('You must be logged in to send invitations');
+        setInviteLoading(false);
+        return;
+      }
 
-      // For now, we'll check if a user exists with that email
-      // Note: This is a simplified version - in production you'd use Supabase Auth Admin API
+      // Check if user is already a member
+      const { data: existingMember } = await supabase
+        .from('trip_members')
+        .select('user_id')
+        .eq('trip_id', tripId)
+        .limit(1);
 
-      setInviteError('Invitation feature coming soon! For now, ask your friend to sign up and share the trip ID.');
+      // Check if there's already a pending invitation for this email on THIS trip
+      const { data: existingInvite } = await supabase
+        .from('trip_invitations')
+        .select('id')
+        .eq('trip_id', tripId)
+        .eq('email', inviteEmail.toLowerCase())
+        .eq('status', 'pending')
+        .maybeSingle();
 
-      // TODO: Implement proper invitation system:
-      // - Create invitations table
-      // - Send email with invite link
-      // - Handle invite acceptance
+      if (existingInvite) {
+        setInviteError('An invitation has already been sent to this email for this trip');
+        setInviteLoading(false);
+        return;
+      }
 
-      setInviteLoading(false);
+      // Create invitation record for THIS specific trip
+      const { error: inviteError } = await supabase
+        .from('trip_invitations')
+        .insert({
+          trip_id: tripId, // CRITICAL: Must be specific to this trip
+          email: inviteEmail.toLowerCase(),
+          invited_by: user.id,
+          status: 'pending',
+        });
+
+      if (inviteError) throw inviteError;
+
+      // Success!
+      setInviteError('');
+      setInviteEmail('');
+      setIsDialogOpen(false);
+      alert(`Invitation sent to ${inviteEmail}! They will see it when they log in.`);
+
     } catch (error: any) {
       console.error('Error inviting member:', error);
       setInviteError(error.message || 'Failed to send invitation');
+    } finally {
       setInviteLoading(false);
     }
   };

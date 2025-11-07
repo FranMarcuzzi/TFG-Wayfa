@@ -5,6 +5,7 @@ import { AuthGuard } from '@/components/AuthGuard';
 import { NavBar } from '@/components/NavBar';
 import { TripList } from '@/components/TripList';
 import { CreateTripModal } from '@/components/CreateTripModal';
+import { InvitationsList } from '@/components/InvitationsList';
 import { Button } from '@/components/ui/button';
 import { Plus } from 'lucide-react';
 
@@ -29,7 +30,10 @@ export default function DashboardPage() {
             </Button>
           </div>
 
-          <TripList />
+          <div className="space-y-6">
+            <InvitationsList />
+            <TripList />
+          </div>
         </main>
 
         <CreateTripModal open={showCreateModal} onOpenChange={setShowCreateModal} />

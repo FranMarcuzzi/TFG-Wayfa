@@ -176,6 +176,38 @@ export type Database = {
           created_at?: string;
         };
       };
+      trip_invitations: {
+        Row: {
+          id: string;
+          trip_id: string;
+          email: string;
+          invited_by: string;
+          status: 'pending' | 'accepted' | 'declined';
+          token: string;
+          created_at: string;
+          expires_at: string;
+        };
+        Insert: {
+          id?: string;
+          trip_id: string;
+          email: string;
+          invited_by: string;
+          status?: 'pending' | 'accepted' | 'declined';
+          token?: string;
+          created_at?: string;
+          expires_at?: string;
+        };
+        Update: {
+          id?: string;
+          trip_id?: string;
+          email?: string;
+          invited_by?: string;
+          status?: 'pending' | 'accepted' | 'declined';
+          token?: string;
+          created_at?: string;
+          expires_at?: string;
+        };
+      };
     };
   };
 };
