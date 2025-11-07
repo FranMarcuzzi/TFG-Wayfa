@@ -18,21 +18,20 @@ export default function DashboardPage() {
         <NavBar />
 
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="flex justify-between items-center mb-8">
+          <div className="flex items-start justify-between mb-8">
             <div>
-              <h1 className="text-3xl font-semibold text-gray-900">Your Trips</h1>
-              <p className="text-gray-600 mt-1">Plan and collaborate on group trips</p>
+              <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight text-gray-900">Welcome back, Francisco!</h1>
+              <p className="text-gray-600 mt-3">Ready for your next adventure?</p>
             </div>
-
-            <Button onClick={() => setShowCreateModal(true)} className="flex items-center gap-2">
+            <Button onClick={() => setShowCreateModal(true)} className="mt-2 flex items-center gap-2 shadow-[0_6px_0_rgba(0,0,0,0.2)]">
               <Plus className="h-4 w-4" />
-              Create Trip
+              Create new trip
             </Button>
           </div>
 
           <div className="space-y-6">
             <InvitationsList />
-            <TripList />
+            <TripList onCreateTrip={() => setShowCreateModal(true)} />
           </div>
         </main>
 
