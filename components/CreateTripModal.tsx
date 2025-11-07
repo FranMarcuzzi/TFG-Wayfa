@@ -20,6 +20,8 @@ export function CreateTripModal({ open, onOpenChange }: CreateTripModalProps) {
   const [endDate, setEndDate] = useState('');
   const [description, setDescription] = useState('');
   const [coverUrl, setCoverUrl] = useState('');
+  const [inviteInput, setInviteInput] = useState('');
+  const [invitees, setInvitees] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -80,6 +82,21 @@ export function CreateTripModal({ open, onOpenChange }: CreateTripModalProps) {
         setLoading(false);
       } else if (data) {
         const created = data as { id: string };
+
+        // create invitations if any
+        const emails = invitees
+          .map((e) => e.trim().toLowerCase())
+          .filter((e) => e && e.includes('@'));
+        if (emails.length > 0) {
+          const invites = emails.map((email) => ({
+            trip_id: created.id,
+            email,
+            invited_by: user.id,
+            status: 'pending',
+          }));
+          await supabase.from('trip_invitations').insert(invites as any);
+        }
+
         console.log('Success! Redirecting to trip:', created.id);
         onOpenChange(false);
         router.push(`/trip/${created.id}`);
@@ -197,6 +214,47 @@ export function CreateTripModal({ open, onOpenChange }: CreateTripModalProps) {
               placeholder="A collaborative trip to explore the ancient wonders of Rome..."
               className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900/20"
             />
+          </div>
+
+          <div className="pt-2">
+            <h3 className="text-sm font-semibold text-gray-900 mb-2">Invite participants</h3>
+            <div className="flex gap-2">
+              <Input
+                placeholder="Enter email addresses"
+                value={inviteInput}
+                onChange={(e) => setInviteInput(e.target.value)}
+                disabled={loading}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  const email = inviteInput.trim();
+                  if (!email || !email.includes('@')) return;
+                  if (!invitees.includes(email)) setInvitees([...invitees, email]);
+                  setInviteInput('');
+                }}
+                disabled={loading}
+              >
+                Add
+              </Button>
+            </div>
+            {invitees.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-2">
+                {invitees.map((email) => (
+                  <span key={email} className="inline-flex items-center gap-2 text-sm px-2 py-1 rounded-full bg-gray-100 text-gray-800">
+                    {email}
+                    <button
+                      type="button"
+                      className="text-gray-500 hover:text-gray-700"
+                      onClick={() => setInvitees(invitees.filter((e) => e !== email))}
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="flex justify-end gap-3 pt-4">

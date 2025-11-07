@@ -6,6 +6,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Plus, Clock, MapPin, X, Sun, Plane, Users, ThumbsUp, MessageCircle } from 'lucide-react';
+import { TripMembers } from '@/components/TripMembers';
 
 interface Activity {
   id: string;
@@ -205,6 +206,8 @@ export function Itinerary({ tripId }: ItineraryProps) {
             <Button size="sm">Add expense</Button>
           </div>
         </Card>
+
+        <TripMembers tripId={tripId} />
       </div>
 
       <div className="space-y-6">
