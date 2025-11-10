@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { signOut } from '@/lib/auth';
 import { Button } from '@/components/ui/button';
-import { LogOut } from 'lucide-react';
+import { LogOut, User } from 'lucide-react';
 
 export function NavBar() {
   const router = useRouter();
@@ -22,15 +22,21 @@ export function NavBar() {
             Wayfa
           </Link>
 
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleSignOut}
-            className="flex items-center gap-2"
-          >
-            <LogOut className="h-4 w-4" />
-            Sign out
-          </Button>
+          <div className="flex items-center gap-2">
+            <Link href="/profile" className="inline-flex items-center gap-2 px-3 py-2 text-sm rounded-md hover:bg-gray-100">
+              <User className="h-4 w-4" />
+              Profile
+            </Link>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleSignOut}
+              className="flex items-center gap-2"
+            >
+              <LogOut className="h-4 w-4" />
+              Sign out
+            </Button>
+          </div>
         </div>
       </div>
     </nav>
