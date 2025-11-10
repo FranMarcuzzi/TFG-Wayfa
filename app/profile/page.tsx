@@ -1,0 +1,179 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabase/client';
+import { AuthGuard } from '@/components/AuthGuard';
+import { NavBar } from '@/components/NavBar';
+import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+
+export default function ProfilePage() {
+  const router = useRouter();
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [email, setEmail] = useState<string>('');
+  const [displayName, setDisplayName] = useState<string>('');
+  const [edit, setEdit] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        router.push('/login');
+        return;
+      }
+
+      setEmail(user.email || '');
+
+      // fetch profile; if not exists, create a minimal one
+      const { data: profile } = await supabase
+        .from('user_profiles')
+        .select('display_name')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (!profile) {
+        await supabase.from('user_profiles').insert({
+          user_id: user.id,
+          email: user.email,
+          display_name: null,
+        } as any);
+        setDisplayName('');
+      } else {
+        setDisplayName((profile as any).display_name || '');
+      }
+
+      setLoading(false);
+    })();
+  }, [router]);
+
+  const initials = (name: string) => {
+    if (!name) return 'U';
+    const parts = name.trim().split(' ');
+    if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+    return name.substring(0, 2).toUpperCase();
+  };
+
+  const saveProfile = async () => {
+    setSaving(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    await supabase
+      .from('user_profiles')
+      .upsert({
+        user_id: user.id,
+        email: user.email,
+        display_name: displayName || null,
+      } as any);
+
+    setSaving(false);
+    setEdit(false);
+  };
+
+  const logout = async () => {
+    await supabase.auth.signOut();
+    router.push('/login');
+  };
+
+  if (loading) {
+    return (
+      <AuthGuard>
+        <div className="min-h-screen bg-gray-50">
+          <NavBar />
+          <main className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <div className="text-gray-600">Loading profile...</div>
+          </main>
+        </div>
+      </AuthGuard>
+    );
+  }
+
+  return (
+    <AuthGuard>
+      <div className="min-h-screen bg-gray-50">
+        <NavBar />
+        <main className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="flex justify-end mb-4">
+            <Link href="/dashboard" className="inline-flex items-center px-4 py-2 rounded-md bg-black text-white shadow-[0_6px_0_rgba(0,0,0,0.2)]">
+              Back to Dashboard
+            </Link>
+          </div>
+
+          <div className="flex flex-col items-center text-center mb-6">
+            <Avatar className="w-24 h-24">
+              <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white text-2xl">
+                {initials(displayName || email)}
+              </AvatarFallback>
+            </Avatar>
+            <h1 className="mt-4 text-2xl font-bold text-gray-900">{displayName || 'Your Name'}</h1>
+            <p className="text-gray-600">{email}</p>
+            <Button onClick={() => setEdit(true)} variant="secondary" className="mt-3" disabled={edit}>
+              Edit Profile
+            </Button>
+          </div>
+
+          <Card className="p-0 overflow-hidden">
+            <div className="divide-y">
+              <div className="flex items-center justify-between p-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center">👤</div>
+                  <div>
+                    <div className="font-medium text-gray-900">Personal Data</div>
+                    <div className="text-sm text-gray-500">Name and surname</div>
+                  </div>
+                </div>
+                <div className="w-1/2 max-w-sm">
+                  <Input
+                    value={displayName}
+                    onChange={(e) => setDisplayName(e.target.value)}
+                    disabled={!edit}
+                    placeholder="e.g. Francisco Marcuzzi"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between p-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center">🌐</div>
+                  <div>
+                    <div className="font-medium text-gray-900">Language</div>
+                    <div className="text-sm text-gray-500">Coming soon</div>
+                  </div>
+                </div>
+                <div className="text-sm text-gray-600">English</div>
+              </div>
+
+              <div className="flex items-center justify-between p-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center">🌙</div>
+                  <div>
+                    <div className="font-medium text-gray-900">Appearance</div>
+                    <div className="text-sm text-gray-500">Coming soon</div>
+                  </div>
+                </div>
+                <div>
+                  <input type="checkbox" disabled className="w-10 h-5" />
+                </div>
+              </div>
+            </div>
+          </Card>
+
+          <div className="flex justify-end gap-3 mt-4">
+            <Button variant="outline" onClick={() => setEdit(false)} disabled={!edit}>Cancel</Button>
+            <Button onClick={saveProfile} disabled={!edit || saving}>{saving ? 'Saving...' : 'Save changes'}</Button>
+          </div>
+
+          <div className="mt-8">
+            <Button variant="destructive" className="w-full" onClick={logout}>Log out</Button>
+            <div className="text-center text-xs text-gray-500 mt-2">Delete account</div>
+          </div>
+        </main>
+      </div>
+    </AuthGuard>
+  );
+}
