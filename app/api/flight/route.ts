@@ -40,14 +40,22 @@ export async function GET(req: NextRequest) {
       departure: {
         airport: item.departure?.airport || null,
         scheduled: item.departure?.scheduled || null,
+        estimated: item.departure?.estimated || null,
+        actual: item.departure?.actual || null,
         gate: item.departure?.gate || null,
         terminal: item.departure?.terminal || null,
+        timezone: item.departure?.timezone || null,
+        delay: item.departure?.delay ?? null,
       },
       arrival: {
         airport: item.arrival?.airport || null,
         scheduled: item.arrival?.scheduled || null,
+        estimated: item.arrival?.estimated || null,
+        actual: item.arrival?.actual || null,
         gate: item.arrival?.gate || null,
         terminal: item.arrival?.terminal || null,
+        timezone: item.arrival?.timezone || null,
+        delay: item.arrival?.delay ?? null,
       },
       status: item.flight_status || null,
     };

@@ -43,6 +43,9 @@ export function Itinerary({ tripId }: ItineraryProps) {
   const [weatherLoading, setWeatherLoading] = useState<boolean>(false);
   const [weatherError, setWeatherError] = useState<string>('');
   const [weather, setWeather] = useState<{ name: string; country?: string; temp: number; description?: string | null; icon?: string | null } | null>(null);
+  const [forecast, setForecast] = useState<Array<{ dt: number; min: number; max: number; icon: string | null; description: string | null; precip?: number; wind?: number }>>([]);
+  const [forecastLoading, setForecastLoading] = useState<boolean>(false);
+  const [forecastError, setForecastError] = useState<string>('');
   // Flight widget state
   const [flightQuery, setFlightQuery] = useState<string>('');
   const [flightLoading, setFlightLoading] = useState<boolean>(false);
@@ -50,8 +53,26 @@ export function Itinerary({ tripId }: ItineraryProps) {
   const [flight, setFlight] = useState<{
     flight?: string | null;
     airline?: string | null;
-    departure?: { airport?: string | null; scheduled?: string | null; gate?: string | null; terminal?: string | null };
-    arrival?: { airport?: string | null; scheduled?: string | null; gate?: string | null; terminal?: string | null };
+    departure?: {
+      airport?: string | null;
+      scheduled?: string | null;
+      estimated?: string | null;
+      actual?: string | null;
+      gate?: string | null;
+      terminal?: string | null;
+      timezone?: string | null;
+      delay?: number | null;
+    };
+    arrival?: {
+      airport?: string | null;
+      scheduled?: string | null;
+      estimated?: string | null;
+      actual?: string | null;
+      gate?: string | null;
+      terminal?: string | null;
+      timezone?: string | null;
+      delay?: number | null;
+    };
     status?: string | null;
   } | null>(null);
   const [trip, setTrip] = useState<{ destination: string | null; lat: number | null; lng: number | null } | null>(null);
@@ -121,6 +142,33 @@ export function Itinerary({ tripId }: ItineraryProps) {
           setWeatherLoading(false);
         }
       }
+
+      // Load 7-day forecast using lat/lng if available, otherwise fallback to destination name
+      const lat = (data as any).lat as number | null;
+      const lng = (data as any).lng as number | null;
+      if (lat != null && lng != null) {
+        fetchForecast(lat, lng, null);
+      } else if (dest) {
+        fetchForecast(null, null, dest);
+      }
+    }
+  };
+
+  const fetchForecast = async (lat: number | null, lng: number | null, q: string | null) => {
+    try {
+      setForecastLoading(true);
+      setForecastError('');
+      const params = lat != null && lng != null ? `lat=${lat}&lng=${lng}` : q ? `q=${encodeURIComponent(q)}` : '';
+      if (!params) return;
+      const res = await fetch(`/api/weather/forecast?${params}`);
+      const json = await res.json();
+      if (!res.ok || json.error) throw new Error(json.error || 'Failed');
+      setForecast(Array.isArray(json.daily) ? json.daily : []);
+    } catch (err: any) {
+      setForecast([]);
+      setForecastError(err?.message || 'Failed to fetch forecast');
+    } finally {
+      setForecastLoading(false);
     }
   };
 
@@ -301,6 +349,9 @@ export function Itinerary({ tripId }: ItineraryProps) {
                       {weatherError && (
                         <div className="text-xs text-red-600 mt-1">{weatherError}</div>
                       )}
+                      {forecastError && (
+                        <div className="text-xs text-red-600 mt-1">{forecastError}</div>
+                      )}
                       <div className="flex items-center gap-2 mt-3">
                         <Input
                           placeholder="City (e.g., Rome,IT)"
@@ -318,6 +369,8 @@ export function Itinerary({ tripId }: ItineraryProps) {
                               const json = await res.json();
                               if (!res.ok || json.error) throw new Error(json.error || 'Failed');
                               setWeather(json);
+                              // also refresh forecast based on query
+                              fetchForecast(null, null, weatherQuery);
                             } catch (err: any) {
                               setWeather(null);
                               setWeatherError(err?.message || 'Failed to fetch weather');
@@ -328,6 +381,31 @@ export function Itinerary({ tripId }: ItineraryProps) {
                         >
                           {weatherLoading ? 'Loading...' : 'Get'}
                         </Button>
+                      </div>
+                      <div className="mt-4">
+                        {forecastLoading ? (
+                          <div className="text-xs text-gray-500">Loading 7-day forecast...</div>
+                        ) : forecast && forecast.length > 0 ? (
+                          <div className="grid grid-cols-7 gap-2">
+                            {forecast.map((d) => (
+                              <div key={d.dt} className="text-center text-xs p-2 border rounded-md">
+                                <div className="font-medium">{new Date(d.dt * 1000).toLocaleDateString(undefined, { weekday: 'short' })}</div>
+                                <div className="text-gray-500">{new Date(d.dt * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</div>
+                                <div className="my-1">
+                                  {d.icon ? (
+                                    <img alt={d.description || 'weather'} className="mx-auto h-6 w-6" src={`https://openweathermap.org/img/wn/${d.icon}@2x.png`} />
+                                  ) : (
+                                    <Sun className="h-5 w-5 text-yellow-500 mx-auto" />
+                                  )}
+                                </div>
+                                <div className="font-semibold">{d.max}°</div>
+                                <div className="text-gray-500">{d.min}°</div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="text-xs text-gray-500">No forecast available</div>
+                        )}
                       </div>
                     </div>
                     <div className="text-sm text-gray-500">Weather</div>
@@ -349,6 +427,30 @@ export function Itinerary({ tripId }: ItineraryProps) {
                           <span className={flight.status === 'cancelled' ? 'text-red-600 font-medium' : 'text-green-600 font-medium'}>
                             {flight.status}
                           </span>
+                        </div>
+                      )}
+                      {flight && (
+                        <div className="mt-3 grid grid-cols-2 gap-3 text-xs text-gray-700">
+                          <div>
+                            <div className="font-semibold text-gray-900">Departure</div>
+                            {flight.departure?.scheduled && <div>Scheduled: {new Date(flight.departure.scheduled).toLocaleString()}</div>}
+                            {flight.departure?.estimated && <div>Estimated: {new Date(flight.departure.estimated).toLocaleString()}</div>}
+                            {flight.departure?.actual && <div>Actual: {new Date(flight.departure.actual).toLocaleString()}</div>}
+                            {(flight.departure?.terminal || flight.departure?.gate) && (
+                              <div>Terminal/Gate: {flight.departure.terminal || '-'} / {flight.departure.gate || '-'}</div>
+                            )}
+                            {typeof flight.departure?.delay === 'number' && <div>Delay: {flight.departure.delay} min</div>}
+                          </div>
+                          <div>
+                            <div className="font-semibold text-gray-900">Arrival</div>
+                            {flight.arrival?.scheduled && <div>Scheduled: {new Date(flight.arrival.scheduled).toLocaleString()}</div>}
+                            {flight.arrival?.estimated && <div>Estimated: {new Date(flight.arrival.estimated).toLocaleString()}</div>}
+                            {flight.arrival?.actual && <div>Actual: {new Date(flight.arrival.actual).toLocaleString()}</div>}
+                            {(flight.arrival?.terminal || flight.arrival?.gate) && (
+                              <div>Terminal/Gate: {flight.arrival.terminal || '-'} / {flight.arrival.gate || '-'}</div>
+                            )}
+                            {typeof flight.arrival?.delay === 'number' && <div>Delay: {flight.arrival.delay} min</div>}
+                          </div>
                         </div>
                       )}
                       {flightError && (
