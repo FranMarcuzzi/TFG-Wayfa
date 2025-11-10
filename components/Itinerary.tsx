@@ -38,10 +38,28 @@ export function Itinerary({ tripId }: ItineraryProps) {
   const [newActivityStartTime, setNewActivityStartTime] = useState('');
   const [newActivityEndTime, setNewActivityEndTime] = useState('');
   const [selectedDayId, setSelectedDayId] = useState<string | null>(null);
+  // Weather widget state
+  const [weatherQuery, setWeatherQuery] = useState<string>('');
+  const [weatherLoading, setWeatherLoading] = useState<boolean>(false);
+  const [weatherError, setWeatherError] = useState<string>('');
+  const [weather, setWeather] = useState<{ name: string; country?: string; temp: number; description?: string | null; icon?: string | null } | null>(null);
+  // Flight widget state
+  const [flightQuery, setFlightQuery] = useState<string>('');
+  const [flightLoading, setFlightLoading] = useState<boolean>(false);
+  const [flightError, setFlightError] = useState<string>('');
+  const [flight, setFlight] = useState<{
+    flight?: string | null;
+    airline?: string | null;
+    departure?: { airport?: string | null; scheduled?: string | null; gate?: string | null; terminal?: string | null };
+    arrival?: { airport?: string | null; scheduled?: string | null; gate?: string | null; terminal?: string | null };
+    status?: string | null;
+  } | null>(null);
+  const [trip, setTrip] = useState<{ destination: string | null; lat: number | null; lng: number | null } | null>(null);
 
   useEffect(() => {
     loadDays();
     subscribeToChanges();
+    loadTrip();
   }, [tripId]);
 
   const loadDays = async () => {
@@ -74,6 +92,36 @@ export function Itinerary({ tripId }: ItineraryProps) {
     }
 
     setLoading(false);
+  };
+
+  const loadTrip = async () => {
+    const { data } = await supabase
+      .from('trips')
+      .select('destination, lat, lng')
+      .eq('id', tripId)
+      .maybeSingle();
+
+    if (data) {
+      setTrip({ destination: (data as any).destination ?? null, lat: (data as any).lat ?? null, lng: (data as any).lng ?? null });
+      // Pre-fill weather if we have a destination text
+      const dest = (data as any).destination as string | null;
+      if (dest && !weather) {
+        setWeatherQuery(dest);
+        try {
+          setWeatherLoading(true);
+          setWeatherError('');
+          const res = await fetch(`/api/weather?q=${encodeURIComponent(dest)}`);
+          const json = await res.json();
+          if (!res.ok || json.error) throw new Error(json.error || 'Failed');
+          setWeather(json);
+        } catch (err: any) {
+          setWeather(null);
+          setWeatherError(err?.message || 'Failed to fetch weather');
+        } finally {
+          setWeatherLoading(false);
+        }
+      }
+    }
   };
 
   const subscribeToChanges = () => {
@@ -232,30 +280,113 @@ export function Itinerary({ tripId }: ItineraryProps) {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <Card className="p-5">
                   <div className="flex items-start justify-between">
-                    <div>
+                    <div className="flex-1">
                       <div className="flex items-center gap-2 text-3xl font-semibold text-gray-900">
-                        25°C
-                        <Sun className="h-6 w-6 text-yellow-500" />
+                        {weather ? (
+                          <>
+                            {weather.temp}°C
+                            <Sun className="h-6 w-6 text-yellow-500" />
+                          </>
+                        ) : (
+                          <>
+                            --°C <Sun className="h-6 w-6 text-yellow-500" />
+                          </>
+                        )}
                       </div>
-                      <div className="text-sm text-gray-600">Sunny intervals</div>
+                      <div className="text-sm text-gray-600">
+                        {weather
+                          ? `${weather.name}${weather.country ? ', ' + weather.country : ''} • ${weather.description ?? 'Weather'}`
+                          : 'Enter a city to fetch the weather'}
+                      </div>
+                      {weatherError && (
+                        <div className="text-xs text-red-600 mt-1">{weatherError}</div>
+                      )}
+                      <div className="flex items-center gap-2 mt-3">
+                        <Input
+                          placeholder="City (e.g., Rome,IT)"
+                          value={weatherQuery}
+                          onChange={(e) => setWeatherQuery(e.target.value)}
+                        />
+                        <Button
+                          size="sm"
+                          disabled={weatherLoading || !weatherQuery}
+                          onClick={async () => {
+                            try {
+                              setWeatherLoading(true);
+                              setWeatherError('');
+                              const res = await fetch(`/api/weather?q=${encodeURIComponent(weatherQuery)}`);
+                              const json = await res.json();
+                              if (!res.ok || json.error) throw new Error(json.error || 'Failed');
+                              setWeather(json);
+                            } catch (err: any) {
+                              setWeather(null);
+                              setWeatherError(err?.message || 'Failed to fetch weather');
+                            } finally {
+                              setWeatherLoading(false);
+                            }
+                          }}
+                        >
+                          {weatherLoading ? 'Loading...' : 'Get'}
+                        </Button>
+                      </div>
                     </div>
-                    <div className="text-sm text-gray-500">Weather Forecast</div>
-                  </div>
-                  <div className="grid grid-cols-4 gap-2 mt-4 text-center text-sm text-gray-600">
-                    <div>Mon<br/>24°</div>
-                    <div>Tue<br/>26°</div>
-                    <div>Wed<br/>22°</div>
-                    <div>Thu<br/>20°</div>
+                    <div className="text-sm text-gray-500">Weather</div>
                   </div>
                 </Card>
 
                 <Card className="p-5">
                   <div className="flex items-start justify-between">
-                    <div>
+                    <div className="flex-1">
                       <div className="text-sm text-gray-500">Flight Status</div>
-                      <div className="font-semibold text-gray-900">Flight AZ 611</div>
-                      <div className="text-sm text-gray-600">Rome → Buenos Aires</div>
-                      <div className="text-sm mt-2"><span className="text-green-600 font-medium">On time</span></div>
+                      <div className="font-semibold text-gray-900">{flight?.flight || 'Enter flight code'}</div>
+                      {flight?.departure?.airport && flight?.arrival?.airport && (
+                        <div className="text-sm text-gray-600">
+                          {flight.departure.airport} → {flight.arrival.airport}
+                        </div>
+                      )}
+                      {flight?.status && (
+                        <div className="text-sm mt-2">
+                          <span className={flight.status === 'cancelled' ? 'text-red-600 font-medium' : 'text-green-600 font-medium'}>
+                            {flight.status}
+                          </span>
+                        </div>
+                      )}
+                      {flightError && (
+                        <div className="text-xs text-red-600 mt-1">{flightError}</div>
+                      )}
+                      <div className="flex items-center gap-2 mt-3">
+                        <Input
+                          placeholder="Flight IATA (e.g., AZ611)"
+                          value={flightQuery}
+                          onChange={(e) => setFlightQuery(e.target.value.toUpperCase())}
+                        />
+                        <Button
+                          size="sm"
+                          disabled={flightLoading || !flightQuery}
+                          onClick={async () => {
+                            try {
+                              setFlightLoading(true);
+                              setFlightError('');
+                              const res = await fetch(`/api/flight?flight=${encodeURIComponent(flightQuery)}`);
+                              const json = await res.json();
+                              if (!res.ok || json.error) throw new Error(json.error || 'Failed');
+                              if (json.notFound) {
+                                setFlight(null);
+                                setFlightError('Flight not found');
+                              } else {
+                                setFlight(json);
+                              }
+                            } catch (err: any) {
+                              setFlight(null);
+                              setFlightError(err?.message || 'Failed to fetch flight');
+                            } finally {
+                              setFlightLoading(false);
+                            }
+                          }}
+                        >
+                          {flightLoading ? 'Loading...' : 'Get'}
+                        </Button>
+                      </div>
                     </div>
                     <Plane className="h-6 w-6 text-gray-400" />
                   </div>

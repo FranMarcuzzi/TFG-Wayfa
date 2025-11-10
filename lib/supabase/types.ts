@@ -12,6 +12,9 @@ export type Database = {
           created_at: string;
           cover_url: string | null;
           description: string | null;
+          place_id: string | null;
+          lat: number | null;
+          lng: number | null;
         };
         Insert: {
           id?: string;
@@ -23,6 +26,9 @@ export type Database = {
           cover_url?: string | null;
           description?: string | null;
           created_at?: string;
+          place_id?: string | null;
+          lat?: number | null;
+          lng?: number | null;
         };
         Update: {
           id?: string;
@@ -34,6 +40,9 @@ export type Database = {
           cover_url?: string | null;
           description?: string | null;
           created_at?: string;
+          place_id?: string | null;
+          lat?: number | null;
+          lng?: number | null;
         };
       };
       trip_members: {

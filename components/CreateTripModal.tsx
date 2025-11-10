@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -16,6 +16,12 @@ export function CreateTripModal({ open, onOpenChange }: CreateTripModalProps) {
   const router = useRouter();
   const [title, setTitle] = useState('');
   const [destination, setDestination] = useState('');
+  const [destQuery, setDestQuery] = useState('');
+  const [destPreds, setDestPreds] = useState<{ description: string; place_id: string }[]>([]);
+  const [destLoading, setDestLoading] = useState(false);
+  const destDebounceRef = useRef<NodeJS.Timeout | null>(null);
+  const [placeId, setPlaceId] = useState<string | null>(null);
+  const [coords, setCoords] = useState<{ lat: number | null; lng: number | null }>({ lat: null, lng: null });
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [description, setDescription] = useState('');
@@ -65,11 +71,14 @@ export function CreateTripModal({ open, onOpenChange }: CreateTripModalProps) {
         .insert({
           owner_id: user.id,
           title,
-          destination: destination || null,
+          destination: (destQuery || destination) || null,
           start_date: startDate || null,
           end_date: endDate || null,
           description: description || null,
           cover_url: coverUrl || null,
+          place_id: placeId || null,
+          lat: coords.lat,
+          lng: coords.lng,
         } as any)
         .select()
         .single();
@@ -108,6 +117,32 @@ export function CreateTripModal({ open, onOpenChange }: CreateTripModalProps) {
     }
   };
 
+  // Destinations Autocomplete
+  useEffect(() => {
+    // seed query when modal opens
+    if (open) setDestQuery(destination);
+  }, [open]);
+
+  useEffect(() => {
+    if (!destQuery || destQuery.length < 2) {
+      setDestPreds([]);
+      return;
+    }
+    if (destDebounceRef.current) clearTimeout(destDebounceRef.current);
+    destDebounceRef.current = setTimeout(async () => {
+      try {
+        setDestLoading(true);
+        const res = await fetch(`/api/places/autocomplete?q=${encodeURIComponent(destQuery)}`);
+        const json = await res.json();
+        setDestPreds(json.predictions || []);
+      } catch (e) {
+        setDestPreds([]);
+      } finally {
+        setDestLoading(false);
+      }
+    }, 250);
+  }, [destQuery]);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
@@ -137,18 +172,53 @@ export function CreateTripModal({ open, onOpenChange }: CreateTripModalProps) {
             />
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-2 relative">
             <label htmlFor="destination" className="block text-sm font-medium text-gray-700">
               Destination
             </label>
             <Input
               id="destination"
               type="text"
-              value={destination}
-              onChange={(e) => setDestination(e.target.value)}
+              value={destQuery}
+              onChange={(e) => setDestQuery(e.target.value)}
               disabled={loading}
               placeholder="Rome, Italy"
+              autoComplete="off"
             />
+            {destQuery && destPreds.length > 0 && (
+              <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-md shadow-sm max-h-56 overflow-auto">
+                {destPreds.map((p) => (
+                  <button
+                    type="button"
+                    key={p.place_id}
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
+                    onClick={async () => {
+                      setDestination(p.description);
+                      setDestQuery(p.description);
+                      setDestPreds([]);
+                      setPlaceId(p.place_id);
+                      // fetch details for coords
+                      try {
+                        const res = await fetch(`/api/places/details?place_id=${encodeURIComponent(p.place_id)}`);
+                        const json = await res.json();
+                        if (json && json.lat != null && json.lng != null) {
+                          setCoords({ lat: json.lat, lng: json.lng });
+                        } else {
+                          setCoords({ lat: null, lng: null });
+                        }
+                      } catch {
+                        setCoords({ lat: null, lng: null });
+                      }
+                    }}
+                  >
+                    {p.description}
+                  </button>
+                ))}
+              </div>
+            )}
+            {destLoading && (
+              <div className="text-xs text-gray-500">Searching...</div>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-4">
