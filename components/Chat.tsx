@@ -74,10 +74,10 @@ export function Chat({ tripId }: ChatProps) {
   const loadMessages = async () => {
     try {
       const { data, error } = await supabase
-        .from('messages')
+        .from('trip_messages')
         .select(`
           *,
-          user_profiles!messages_author_id_fkey (
+          user_profiles!trip_messages_author_id_fkey (
             email,
             display_name
           )
@@ -123,7 +123,7 @@ export function Chat({ tripId }: ChatProps) {
         {
           event: 'INSERT',
           schema: 'public',
-          table: 'messages',
+          table: 'trip_messages',
           filter: `trip_id=eq.${tripId}`,
         },
         async (payload) => {
@@ -131,10 +131,10 @@ export function Chat({ tripId }: ChatProps) {
 
           // Fetch the complete message with author info
           const { data: newMessageData } = await supabase
-            .from('messages')
+            .from('trip_messages')
             .select(`
               *,
-              user_profiles!messages_author_id_fkey (
+              user_profiles!trip_messages_author_id_fkey (
                 email,
                 display_name
               )
@@ -143,10 +143,15 @@ export function Chat({ tripId }: ChatProps) {
             .single();
 
           if (newMessageData) {
+            const msgData = newMessageData as any;
             const messageWithAuthor = {
-              ...newMessageData,
-              author_name: (newMessageData as any).user_profiles?.display_name || null,
-              author_email: (newMessageData as any).user_profiles?.email || 'Unknown',
+              id: msgData.id,
+              trip_id: msgData.trip_id,
+              author_id: msgData.author_id,
+              content: msgData.content,
+              created_at: msgData.created_at,
+              author_name: msgData.user_profiles?.display_name || null,
+              author_email: msgData.user_profiles?.email || 'Unknown',
             };
 
             setMessages((prev) => {
@@ -188,7 +193,7 @@ export function Chat({ tripId }: ChatProps) {
     if (!newMessage.trim() || !currentUserId) return;
 
     const tryInsert = async () => supabase
-      .from('messages')
+      .from('trip_messages')
       .insert({
         trip_id: tripId,
         author_id: currentUserId,
