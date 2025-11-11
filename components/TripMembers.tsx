@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase/client';
+import type { Database } from '@/lib/supabase/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -41,6 +42,21 @@ export function TripMembers({ tripId }: TripMembersProps) {
   useEffect(() => {
     loadMembers();
     checkUserRole();
+    const channel = supabase
+      .channel('trip-members-changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'trip_members', filter: `trip_id=eq.${tripId}` },
+        () => {
+          loadMembers();
+          checkUserRole();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [tripId]);
 
   const checkUserRole = async () => {
@@ -56,7 +72,7 @@ export function TripMembers({ tripId }: TripMembersProps) {
       .eq('user_id', user.id)
       .single();
 
-    setIsOrganizer(data?.role === 'organizer');
+    setIsOrganizer((data as any)?.role === 'organizer');
   };
 
   const loadMembers = async () => {
@@ -140,7 +156,7 @@ export function TripMembers({ tripId }: TripMembersProps) {
       // Create invitation record for THIS specific trip
       const { error: inviteError } = await supabase
         .from('trip_invitations')
-        .insert({
+        .insert<Database['public']['Tables']['trip_invitations']['Insert']>({
           trip_id: tripId, // CRITICAL: Must be specific to this trip
           email: inviteEmail.toLowerCase(),
           invited_by: user.id,

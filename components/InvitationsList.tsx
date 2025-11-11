@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Mail, Check, X } from 'lucide-react';
+import type { Database } from '@/lib/supabase/types';
 
 interface Invitation {
   id: string;
@@ -34,13 +35,15 @@ export function InvitationsList() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user?.email) return;
 
-      setCurrentUserEmail(user.email);
+      // Normalize email to lowercase to avoid case-sensitive mismatches
+      const normalizedEmail = user.email.toLowerCase();
+      setCurrentUserEmail(normalizedEmail);
 
       // Get all pending invitations for this user's email
       const { data: invitationsData, error } = await supabase
         .from('trip_invitations')
         .select('id, trip_id, email, status, created_at')
-        .eq('email', user.email)
+        .eq('email', normalizedEmail)
         .eq('status', 'pending')
         .order('created_at', { ascending: false });
 
@@ -53,14 +56,14 @@ export function InvitationsList() {
             const { data: tripData } = await supabase
               .from('trips')
               .select('title, destination')
-              .eq('id', inv.trip_id)
+              .eq('id', (inv as Database['public']['Tables']['trip_invitations']['Row']).trip_id)
               .single();
 
             return {
-              ...inv,
-              trip_title: tripData?.title,
-              trip_destination: tripData?.destination,
-            };
+              ...(inv as any),
+              trip_title: (tripData as any)?.title,
+              trip_destination: (tripData as any)?.destination,
+            } as Invitation;
           })
         );
 
@@ -90,7 +93,7 @@ export function InvitationsList() {
       if (!existingMember) {
         const { error: memberError } = await supabase
           .from('trip_members')
-          .insert({
+          .insert<Database['public']['Tables']['trip_members']['Insert']>({
             trip_id: invitation.trip_id,
             user_id: user.id,
             role: 'participant',
@@ -98,7 +101,7 @@ export function InvitationsList() {
 
         if (memberError) {
           // If it's a duplicate key error, continue anyway (user is already a member)
-          if (memberError.code !== '23505') {
+          if ((memberError as any).code !== '23505') {
             throw memberError;
           }
         }
@@ -107,10 +110,22 @@ export function InvitationsList() {
       // Update invitation status
       const { error: inviteError } = await supabase
         .from('trip_invitations')
-        .update({ status: 'accepted' })
+        .update<Database['public']['Tables']['trip_invitations']['Update']>({ status: 'accepted' })
         .eq('id', invitation.id);
 
-      if (inviteError) throw inviteError;
+      if (inviteError) {
+        // If another invitation for same (trip_id, email) is already accepted
+        // the unique constraint on (trip_id, email, status) triggers 23505.
+        // In that case, we can just delete this pending one and proceed.
+        if ((inviteError as any).code === '23505') {
+          await supabase
+            .from('trip_invitations')
+            .delete()
+            .eq('id', invitation.id);
+        } else {
+          throw inviteError;
+        }
+      }
 
       // Remove from list
       setInvitations(invitations.filter((inv) => inv.id !== invitation.id));
@@ -118,9 +133,10 @@ export function InvitationsList() {
       // Redirect to the trip page
       router.push(`/trip/${invitation.trip_id}`);
       router.refresh();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error accepting invitation:', error);
-      alert('Failed to accept invitation. Please try again.');
+      const message = error?.message || JSON.stringify(error);
+      alert(`Failed to accept invitation: ${message}`);
     }
   };
 
@@ -128,7 +144,7 @@ export function InvitationsList() {
     try {
       const { error } = await supabase
         .from('trip_invitations')
-        .update({ status: 'declined' })
+        .update<Database['public']['Tables']['trip_invitations']['Update']>({ status: 'declined' })
         .eq('id', invitationId);
 
       if (error) throw error;
