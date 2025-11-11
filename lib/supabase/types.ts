@@ -111,6 +111,46 @@ export type Database = {
           type?: 'food' | 'museum' | 'sightseeing' | 'transport' | 'other' | null;
         };
       };
+      activity_likes: {
+        Row: {
+          activity_id: string;
+          user_id: string;
+          created_at: string;
+        };
+        Insert: {
+          activity_id: string;
+          user_id: string;
+          created_at?: string;
+        };
+        Update: {
+          activity_id?: string;
+          user_id?: string;
+          created_at?: string;
+        };
+      };
+      activity_comments: {
+        Row: {
+          id: string;
+          activity_id: string;
+          user_id: string;
+          content: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          activity_id: string;
+          user_id: string;
+          content: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          activity_id?: string;
+          user_id?: string;
+          content?: string;
+          created_at?: string;
+        };
+      };
       messages: {
         Row: {
           id: string;

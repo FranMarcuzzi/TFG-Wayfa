@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase/client';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Plus, Clock, MapPin, X, Sun, Plane, Users, ThumbsUp, MessageCircle } from 'lucide-react';
+import { Plus, Clock, MapPin, X, Sun, Plane, ThumbsUp, MessageCircle, Utensils, Landmark, Camera, Bus } from 'lucide-react';
 import { TripMembers } from '@/components/TripMembers';
 import { Chat } from '@/components/Chat';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
@@ -88,14 +88,111 @@ export function Itinerary({ tripId }: ItineraryProps) {
       };
       status?: string | null;
     } | null;
-  }>>({});
+  }>>({}));
   const [trip, setTrip] = useState<{ destination: string | null; lat: number | null; lng: number | null } | null>(null);
   const [isChatOpen, setIsChatOpen] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [likesByActivity, setLikesByActivity] = useState<Record<string, { count: number; liked: boolean }>>({});
+  const [commentsCountByActivity, setCommentsCountByActivity] = useState<Record<string, number>>({});
+  const [openCommentsFor, setOpenCommentsFor] = useState<Record<string, boolean>>({});
+  const [commentsByActivity, setCommentsByActivity] = useState<Record<string, Array<{ id: string; user_id: string; content: string; created_at: string; user_name?: string; user_email?: string }>>>({});
+  const [newCommentByActivity, setNewCommentByActivity] = useState<Record<string, string>>({});
+
+  // Reactions and comments helpers
+  const refreshReactions = async (activities: Activity[]) => {
+    if (!activities || activities.length === 0) return;
+    const uid = (await supabase.auth.getUser()).data.user?.id || currentUserId;
+    const likesEntries: Record<string, { count: number; liked: boolean }> = {};
+    const commentsEntries: Record<string, number> = {};
+    for (const a of activities) {
+      const likesRes = await supabase
+        .from('activity_likes')
+        .select('*', { count: 'exact', head: true })
+        .eq('activity_id', a.id);
+      const likedRes = uid
+        ? await supabase
+            .from('activity_likes')
+            .select('user_id')
+            .eq('activity_id', a.id)
+            .eq('user_id', uid)
+            .maybeSingle()
+        : ({ data: null } as any);
+      const commentsRes = await supabase
+        .from('activity_comments')
+        .select('*', { count: 'exact', head: true })
+        .eq('activity_id', a.id);
+      likesEntries[a.id] = { count: (likesRes as any).count || 0, liked: !!(likedRes as any).data };
+      commentsEntries[a.id] = (commentsRes as any).count || 0;
+    }
+    setLikesByActivity(likesEntries);
+    setCommentsCountByActivity(commentsEntries);
+  };
+
+  const toggleLike = async (activityId: string) => {
+    if (!currentUserId) return;
+    const liked = likesByActivity[activityId]?.liked;
+    if (liked) {
+      await supabase.from('activity_likes').delete().eq('activity_id', activityId).eq('user_id', currentUserId);
+    } else {
+      await supabase.from('activity_likes').insert({ activity_id: activityId, user_id: currentUserId } as any);
+    }
+    const countRes = await supabase
+      .from('activity_likes')
+      .select('*', { count: 'exact', head: true })
+      .eq('activity_id', activityId);
+    setLikesByActivity((prev) => ({
+      ...prev,
+      [activityId]: { count: (countRes as any).count || 0, liked: !liked },
+    }));
+  };
+
+  const loadCommentsFor = async (activityId: string) => {
+    const { data } = await supabase
+      .from('activity_comments')
+      .select(`*, user_profiles!activity_comments_user_id_fkey ( email, display_name )`)
+      .eq('activity_id', activityId)
+      .order('created_at', { ascending: true });
+    const mapped = (data || []).map((c: any) => ({
+      id: c.id,
+      activity_id: c.activity_id,
+      user_id: c.user_id,
+      content: c.content,
+      created_at: c.created_at,
+      user_name: c.user_profiles?.display_name || null,
+      user_email: c.user_profiles?.email || 'Unknown',
+    }));
+    setCommentsByActivity((prev) => ({ ...prev, [activityId]: mapped }));
+  };
+
+  const toggleComments = async (activityId: string) => {
+    const isOpen = !!openCommentsFor[activityId];
+    setOpenCommentsFor((prev) => ({ ...prev, [activityId]: !isOpen }));
+    if (!isOpen) await loadCommentsFor(activityId);
+  };
+
+  const addComment = async (activityId: string) => {
+    if (!currentUserId) return;
+    const content = newCommentByActivity[activityId]?.trim();
+    if (!content) return;
+    const { error } = await supabase.from('activity_comments').insert({ activity_id: activityId, user_id: currentUserId, content } as any);
+    if (!error) {
+      setNewCommentByActivity((prev) => ({ ...prev, [activityId]: '' }));
+      await loadCommentsFor(activityId);
+      const countRes = await supabase
+        .from('activity_comments')
+        .select('*', { count: 'exact', head: true })
+        .eq('activity_id', activityId);
+      setCommentsCountByActivity((prev) => ({ ...prev, [activityId]: (countRes as any).count || 0 }));
+    }
+  };
 
   useEffect(() => {
     loadDays();
     subscribeToChanges();
     loadTrip();
+    supabase.auth.getUser().then(({ data }) => {
+      if (data.user) setCurrentUserId(data.user.id);
+    });
   }, [tripId]);
 
   const loadDays = async () => {
@@ -122,6 +219,8 @@ export function Itinerary({ tripId }: ItineraryProps) {
       );
 
       setDays(daysWithActivities);
+      const allActs = daysWithActivities.flatMap((d: any) => d.activities || []);
+      await refreshReactions(allActs as any);
       if (!selectedDayId && daysWithActivities.length > 0) {
         setSelectedDayId(daysWithActivities[0].id);
       }
@@ -579,16 +678,19 @@ export function Itinerary({ tripId }: ItineraryProps) {
                           <div className="w-24 h-16 rounded-lg bg-gray-200 flex items-center justify-center">
                             {(() => {
                               const t = (activity as any).type as string | undefined;
-                              const map: Record<string, string> = { food: 'Food', museum: 'Museum', sightseeing: 'Sight', transport: 'Transport', other: 'Other' };
-                              return t ? <span className="text-[10px] font-medium bg-gray-900 text-white px-2 py-1 rounded">{map[t] || 'Other'}</span> : null;
+                              const Icon = t === 'food' ? Utensils : t === 'museum' ? Landmark : t === 'sightseeing' ? Camera : t === 'transport' ? Bus : null;
+                              return Icon ? <Icon className="h-6 w-6 text-gray-700" /> : null;
                             })()}
                           </div>
                         </div>
                         <div className="flex items-center justify-between mt-4 text-sm text-gray-600">
                       <div className="flex items-center gap-4">
-                        <div className="flex items-center gap-1"><Users className="h-4 w-4" />3</div>
-                        <div className="flex items-center gap-1"><ThumbsUp className="h-4 w-4" />2</div>
-                        <div className="flex items-center gap-1"><MessageCircle className="h-4 w-4" />1</div>
+                        <button className={`flex items-center gap-1 ${likesByActivity[activity.id]?.liked ? 'text-blue-600' : ''}`} onClick={() => toggleLike(activity.id)}>
+                          <ThumbsUp className="h-4 w-4" />{likesByActivity[activity.id]?.count ?? 0}
+                        </button>
+                        <button className="flex items-center gap-1" onClick={() => toggleComments(activity.id)}>
+                          <MessageCircle className="h-4 w-4" />{commentsCountByActivity[activity.id] ?? 0}
+                        </button>
                       </div>
                       <Button variant="ghost" size="sm" onClick={() => deleteActivity(activity.id)}>
                         <X className="h-4 w-4" />
@@ -597,6 +699,28 @@ export function Itinerary({ tripId }: ItineraryProps) {
                   </div>
                 </div>
               </Card>
+              {openCommentsFor[activity.id] && (
+                <Card className="p-4">
+                  <div className="space-y-3">
+                    <div className="space-y-2 max-h-52 overflow-auto">
+                      {(commentsByActivity[activity.id] || []).map((c) => (
+                        <div key={c.id} className="text-sm">
+                          <div className="text-gray-900 font-medium">{c.user_name || (c.user_email ? c.user_email.split('@')[0] : 'User')}</div>
+                          <div className="text-gray-700">{c.content}</div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="Add a comment"
+                        value={newCommentByActivity[activity.id] || ''}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewCommentByActivity((prev) => ({ ...prev, [activity.id]: e.target.value }))}
+                      />
+                      <Button size="sm" onClick={() => addComment(activity.id)} disabled={!(newCommentByActivity[activity.id] || '').trim()}>Send</Button>
+                    </div>
+                  </div>
+                </Card>
+              )}
             ))}
             
 

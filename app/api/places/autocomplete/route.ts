@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
 
     const url = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(
       q
-    )}&types=(cities)&language=en&key=${key}`;
+    )}&language=en&key=${key}`;
 
     const res = await fetch(url, { cache: 'no-store' });
     const json = await res.json();
