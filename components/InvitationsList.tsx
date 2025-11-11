@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -18,6 +19,7 @@ interface Invitation {
 }
 
 export function InvitationsList() {
+  const router = useRouter();
   const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
@@ -76,16 +78,31 @@ export function InvitationsList() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Add user to trip_members
-      const { error: memberError } = await supabase
+      // Check if user is already a member
+      const { data: existingMember } = await supabase
         .from('trip_members')
-        .insert({
-          trip_id: invitation.trip_id,
-          user_id: user.id,
-          role: 'participant',
-        });
+        .select('user_id')
+        .eq('trip_id', invitation.trip_id)
+        .eq('user_id', user.id)
+        .maybeSingle();
 
-      if (memberError) throw memberError;
+      // Add user to trip_members only if not already a member
+      if (!existingMember) {
+        const { error: memberError } = await supabase
+          .from('trip_members')
+          .insert({
+            trip_id: invitation.trip_id,
+            user_id: user.id,
+            role: 'participant',
+          });
+
+        if (memberError) {
+          // If it's a duplicate key error, continue anyway (user is already a member)
+          if (memberError.code !== '23505') {
+            throw memberError;
+          }
+        }
+      }
 
       // Update invitation status
       const { error: inviteError } = await supabase
@@ -98,11 +115,12 @@ export function InvitationsList() {
       // Remove from list
       setInvitations(invitations.filter((inv) => inv.id !== invitation.id));
 
-      // Trigger a custom event to reload trips
-      window.dispatchEvent(new Event('trip-invitation-accepted'));
+      // Redirect to the trip page
+      router.push(`/trip/${invitation.trip_id}`);
+      router.refresh();
     } catch (error) {
       console.error('Error accepting invitation:', error);
-      alert('Failed to accept invitation');
+      alert('Failed to accept invitation. Please try again.');
     }
   };
 
