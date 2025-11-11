@@ -84,7 +84,7 @@ export function TripMembers({ tripId }: TripMembersProps) {
           trip_id,
           user_id,
           role,
-          user_profiles (
+          user_profiles!trip_members_user_id_fkey (
             email,
             display_name
           )
@@ -92,17 +92,26 @@ export function TripMembers({ tripId }: TripMembersProps) {
         .eq('trip_id', tripId)
         .order('role', { ascending: true });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error loading members:', error);
+        throw error;
+      }
+
+      console.log('Raw members data:', data);
 
       // Map the data to include user profile info
-      const membersWithProfiles = (data || []).map((member: any) => ({
-        trip_id: member.trip_id,
-        user_id: member.user_id,
-        role: member.role,
-        email: member.user_profiles?.email || 'Unknown User',
-        display_name: member.user_profiles?.display_name || null,
-      }));
+      const membersWithProfiles = (data || []).map((member: any) => {
+        console.log('Processing member:', member);
+        return {
+          trip_id: member.trip_id,
+          user_id: member.user_id,
+          role: member.role,
+          email: member.user_profiles?.email || 'Unknown User',
+          display_name: member.user_profiles?.display_name || null,
+        };
+      });
 
+      console.log('Processed members:', membersWithProfiles);
       setMembers(membersWithProfiles);
     } catch (error) {
       console.error('Error loading members:', error);
