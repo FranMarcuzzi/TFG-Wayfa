@@ -26,17 +26,22 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    if (latNum == null || lonNum == null) {
-      return NextResponse.json({ error: 'Missing lat/lng or unresolved q' }, { status: 400 });
+    let res: Response;
+    let json: any;
+    if (latNum != null && lonNum != null) {
+      const url = `https://api.openweathermap.org/data/2.5/forecast?lat=${latNum}&lon=${lonNum}&units=metric&appid=${key}`;
+      res = await fetch(url, { cache: 'no-store' });
+    } else if (q) {
+      const urlQ = `https://api.openweathermap.org/data/2.5/forecast?q=${encodeURIComponent(q)}&units=metric&appid=${key}`;
+      res = await fetch(urlQ, { cache: 'no-store' });
+    } else {
+      return NextResponse.json({ lat: null, lng: null, daily: [] });
     }
-
-    const url = `https://api.openweathermap.org/data/2.5/forecast?lat=${latNum}&lon=${lonNum}&units=metric&appid=${key}`;
-    const res = await fetch(url, { cache: 'no-store' });
     if (!res.ok) {
       const text = await res.text();
       return NextResponse.json({ error: 'Upstream error', details: text }, { status: 502 });
     }
-    const json = await res.json();
+    json = await res.json();
 
     const list: any[] = Array.isArray(json.list) ? json.list : [];
     // Group by date (YYYY-MM-DD) in UTC

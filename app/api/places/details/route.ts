@@ -17,13 +17,13 @@ export async function GET(req: NextRequest) {
 
     const url = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${encodeURIComponent(
       placeId
-    )}&fields=name,formatted_address,geometry/location,place_id&key=${key}`;
+    )}&fields=place_id,name,formatted_address,geometry&key=${key}`;
 
     const res = await fetch(url, { cache: 'no-store' });
     const json = await res.json();
 
     if (json.status !== 'OK') {
-      return NextResponse.json({ error: json.status }, { status: 502 });
+      return NextResponse.json({ error: json.error_message || json.status || 'Places error' }, { status: 502 });
     }
 
     const r = json.result;

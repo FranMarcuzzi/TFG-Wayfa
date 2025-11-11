@@ -92,6 +92,7 @@ export function Itinerary({ tripId }: ItineraryProps) {
   const [openCommentsFor, setOpenCommentsFor] = useState<Record<string, boolean>>({});
   const [commentsByActivity, setCommentsByActivity] = useState<Record<string, Array<{ id: string; user_id: string; content: string; created_at: string; user_name?: string; user_email?: string }>>>({});
   const [newCommentByActivity, setNewCommentByActivity] = useState<Record<string, string>>({});
+  const [unreadCount, setUnreadCount] = useState(0);
 
   // Reactions and comments helpers
   const refreshReactions = async (activities: Activity[]) => {
@@ -190,6 +191,10 @@ export function Itinerary({ tripId }: ItineraryProps) {
     });
   }, [tripId]);
 
+  useEffect(() => {
+    if (isChatOpen) setUnreadCount(0);
+  }, [isChatOpen]);
+
   const loadDays = async () => {
     const { data: daysData } = await supabase
       .from('days')
@@ -214,6 +219,36 @@ export function Itinerary({ tripId }: ItineraryProps) {
       );
 
       setDays(daysWithActivities);
+      // Restore persisted weather and flights first
+      await restoreSavedWeather(daysWithActivities as any);
+      await restoreSavedFlights(daysWithActivities as any);
+      // Initialize weather per day from first activity location when available (only if not restored)
+      try {
+        for (const d of daysWithActivities) {
+          const first = (d.activities || [])[0];
+          if (!first || !first.location) continue;
+          // Skip if already set
+          if (weatherByDay[d.id]?.weather) continue;
+          const q = String(first.location);
+          // Save query and fetch weather + forecast
+          setWeatherByDay((prev) => ({
+            ...prev,
+            [d.id]: {
+              ...(prev[d.id] || { query: '', loading: false, error: '', weather: null, forecast: [], forecastLoading: false, forecastError: '' }),
+              query: q,
+            },
+          }));
+          try {
+            const res = await fetch(`/api/weather?q=${encodeURIComponent(q)}`);
+            const json = await res.json();
+            if (res.ok && !json.error) {
+              setWeatherByDay((prev) => ({ ...prev, [d.id]: { ...(prev[d.id] as any), weather: json } }));
+              persistWeather(d.id, q, null, null);
+            }
+          } catch {}
+          await fetchForecastForDay(d.id, null, null, q);
+        }
+      } catch {}
       const allActs = daysWithActivities.flatMap((d: any) => d.activities || []);
       await refreshReactions(allActs as any);
       if (!selectedDayId && daysWithActivities.length > 0) {
@@ -268,6 +303,45 @@ export function Itinerary({ tripId }: ItineraryProps) {
     }
   };
 
+  // persist weather (query and optional coords) per day
+  const persistWeather = (dayId: string, q: string | null, lat: number | null, lng: number | null) => {
+    try {
+      const key = `wayfa:weather:${tripId}`;
+      const saved = JSON.parse(localStorage.getItem(key) || '{}');
+      saved[dayId] = { q: q || '', lat, lng };
+      localStorage.setItem(key, JSON.stringify(saved));
+    } catch {}
+  };
+
+  // restore saved weather per day
+  const restoreSavedWeather = async (daysList: Day[]) => {
+    try {
+      const key = `wayfa:weather:${tripId}`;
+      const saved: Record<string, { q: string; lat: number | null; lng: number | null }> = JSON.parse(localStorage.getItem(key) || '{}');
+      for (const d of daysList) {
+        const item = saved[d.id];
+        if (!item || !item.q) continue;
+        setWeatherByDay((prev) => ({
+          ...prev,
+          [d.id]: {
+            ...(prev[d.id] || { query: '', loading: false, error: '', weather: null, forecast: [], forecastLoading: false, forecastError: '' }),
+            query: item.q,
+          },
+        }));
+        try {
+          // weather current by q
+          const res = await fetch(`/api/weather?q=${encodeURIComponent(item.q)}`);
+          const json = await res.json();
+          if (res.ok && !json.error) {
+            setWeatherByDay((prev) => ({ ...prev, [d.id]: { ...(prev[d.id] as any), weather: json } }));
+          }
+        } catch {}
+        // forecast prefers coords if present
+        await fetchForecastForDay(d.id, item.lat, item.lng, item.lat != null && item.lng != null ? null : item.q);
+      }
+    } catch {}
+  };
+
   const getWeatherForDay = async (dayId: string) => {
     const state = weatherByDay[dayId];
     const query = state?.query || '';
@@ -278,6 +352,7 @@ export function Itinerary({ tripId }: ItineraryProps) {
       const json = await res.json();
       if (!res.ok || json.error) throw new Error(json.error || 'Failed');
       setWeatherByDay((prev) => ({ ...prev, [dayId]: { ...(prev[dayId] as any), weather: json, loading: false } }));
+      persistWeather(dayId, query, null, null);
       await fetchForecastForDay(dayId, null, null, query);
     } catch (err: any) {
       setWeatherByDay((prev) => ({ ...prev, [dayId]: { ...(prev[dayId] as any), weather: null, loading: false, error: err?.message || 'Failed to fetch weather' } }));
@@ -299,9 +374,37 @@ export function Itinerary({ tripId }: ItineraryProps) {
       if (!res.ok || json.error) throw new Error(json.error || 'Failed');
       if (json.notFound) throw new Error('Flight not found');
       setFlightByDay((prev) => ({ ...prev, [dayId]: { ...(prev[dayId] as any), flight: json, loading: false } }));
+      // persist flight query per day
+      try {
+        const key = `wayfa:flight:${tripId}`;
+        const saved = JSON.parse(localStorage.getItem(key) || '{}');
+        saved[dayId] = query;
+        localStorage.setItem(key, JSON.stringify(saved));
+      } catch {}
     } catch (err: any) {
       setFlightByDay((prev) => ({ ...prev, [dayId]: { ...(prev[dayId] as any), flight: null, loading: false, error: err?.message || 'Failed to fetch flight' } }));
     }
+  };
+
+  // restore saved flights when loading days
+  const restoreSavedFlights = async (daysList: Day[]) => {
+    try {
+      const key = `wayfa:flight:${tripId}`;
+      const saved: Record<string, string> = JSON.parse(localStorage.getItem(key) || '{}');
+      for (const d of daysList) {
+        const q = saved[d.id];
+        if (!q) continue;
+        setFlightByDay((prev) => ({ ...prev, [d.id]: { ...(prev[d.id] || { query: '', loading: false, error: '', flight: null }), query: q } }));
+        // fetch flight details
+        try {
+          const res = await fetch(`/api/flight?flight=${encodeURIComponent(q)}`);
+          const json = await res.json();
+          if (res.ok && !json.error && !json.notFound) {
+            setFlightByDay((prev) => ({ ...prev, [d.id]: { ...(prev[d.id] as any), flight: json } }));
+          }
+        } catch {}
+      }
+    } catch {}
   };
 
   const subscribeToChanges = () => {
@@ -320,8 +423,25 @@ export function Itinerary({ tripId }: ItineraryProps) {
       )
       .subscribe();
 
+    const messagesChannel = supabase
+      .channel(`trip-${tripId}-msgs`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'trip_messages',
+          filter: `trip_id=eq.${tripId}`,
+        },
+        () => {
+          setUnreadCount((prev) => (isChatOpen ? prev : prev + 1));
+        }
+      )
+      .subscribe();
+
     return () => {
       supabase.removeChannel(activitiesChannel);
+      supabase.removeChannel(messagesChannel);
     };
   };
 
@@ -360,7 +480,7 @@ export function Itinerary({ tripId }: ItineraryProps) {
       setNewActivityType('other');
       setPlacePreds([]);
       setPlaceIdForActivity(null);
-      setPlaceCoordsForActivity({ lat: null, lng: null });
+      // keep coords around for persistence below
       if (wasFirst && (newActivityLocation || placeIdForActivity)) {
         const query = newActivityLocation;
         const coords = placeCoordsForActivity;
@@ -378,14 +498,19 @@ export function Itinerary({ tripId }: ItineraryProps) {
             setWeatherByDay((prev) => ({ ...prev, [dayId]: { ...(prev[dayId] as any), weather: json } }));
           }
         } catch {}
+        // Persist and fetch forecast preferring coords when present
         if (coords.lat != null && coords.lng != null) {
+          persistWeather(dayId, query, coords.lat, coords.lng);
           await fetchForecastForDay(dayId, coords.lat, coords.lng, null);
         } else if (query) {
+          persistWeather(dayId, query, null, null);
           await fetchForecastForDay(dayId, null, null, query);
         }
       }
       // refresh activities list
       await loadDays();
+      // finally clear coords state
+      setPlaceCoordsForActivity({ lat: null, lng: null });
     }
   };
 
@@ -828,37 +953,30 @@ export function Itinerary({ tripId }: ItineraryProps) {
       </div>
 
       {/* Chat launcher */}
-      <Button
-        className="fixed bottom-6 right-6 rounded-full shadow-lg h-12 w-12 p-0"
-        size="icon"
-        onClick={() => setIsChatOpen(true)}
-        aria-label="Open chat"
-      >
-        <MessageCircle className="h-5 w-5" />
-      </Button>
-
-      {/* Mobile: modal dialog */}
-      <div className="lg:hidden">
-        <Dialog open={isChatOpen} onOpenChange={setIsChatOpen}>
-          <DialogContent className="max-w-2xl p-0">
-            <Chat tripId={tripId} />
-          </DialogContent>
-        </Dialog>
+      <div className="fixed bottom-6 right-6 z-50">
+        <Button
+          className="relative rounded-full shadow-lg h-12 w-12 p-0"
+          size="icon"
+          onClick={() => { setIsChatOpen(true); setUnreadCount(0); }}
+          aria-label="Open chat"
+        >
+          <MessageCircle className="h-5 w-5" />
+          {unreadCount > 0 && (
+            <span className="absolute -top-1 -right-1 bg-red-600 text-white text-[10px] leading-none px-1.5 py-0.5 rounded-full">
+              {unreadCount}
+            </span>
+          )}
+        </Button>
       </div>
 
-      {/* Desktop: side panel */}
+      {/* Compact bottom-right chat box */}
       {isChatOpen && (
-        <div className="hidden lg:flex fixed right-0 top-0 h-full w-[380px] bg-white border-l shadow-xl z-50">
-          <div className="flex-1 flex flex-col">
-            <div className="p-2 border-b flex justify-between items-center">
-              <div className="font-medium">Chat</div>
-              <Button variant="ghost" size="icon" onClick={() => setIsChatOpen(false)} aria-label="Close chat">
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-            <div className="flex-1 overflow-auto p-2">
-              <Chat tripId={tripId} />
-            </div>
+        <div className="fixed bottom-6 right-6 z-50 w-[340px] sm:w-[380px] max-w-[95vw] h-[65vh] max-h-[560px] flex flex-col">
+          <Chat tripId={tripId} compact />
+          <div className="absolute top-2 right-2">
+            <Button variant="ghost" size="icon" onClick={() => setIsChatOpen(false)} aria-label="Close chat">
+              <X className="h-4 w-4" />
+            </Button>
           </div>
         </div>
       )}
