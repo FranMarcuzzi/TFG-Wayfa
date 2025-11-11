@@ -72,25 +72,35 @@ export function Chat({ tripId }: ChatProps) {
   };
 
   const loadMessages = async () => {
-    const { data } = await supabase
-      .from('messages')
-      .select(`
-        *,
-        user_profiles!messages_author_id_fkey (
-          email,
-          display_name
-        )
-      `)
-      .eq('trip_id', tripId)
-      .order('created_at', { ascending: true });
+    try {
+      const { data, error } = await supabase
+        .from('messages')
+        .select(`
+          *,
+          user_profiles!messages_author_id_fkey (
+            email,
+            display_name
+          )
+        `)
+        .eq('trip_id', tripId)
+        .order('created_at', { ascending: true });
 
-    if (data) {
-      const messagesWithAuthors = data.map((msg: any) => ({
-        ...msg,
-        author_name: msg.user_profiles?.display_name || null,
-        author_email: msg.user_profiles?.email || 'Unknown',
-      }));
-      setMessages(messagesWithAuthors);
+      if (error) {
+        console.error('Error loading messages:', error);
+        return;
+      }
+
+      if (data) {
+        console.log('Loaded messages:', data);
+        const messagesWithAuthors = data.map((msg: any) => ({
+          ...msg,
+          author_name: msg.user_profiles?.display_name || null,
+          author_email: msg.user_profiles?.email || 'Unknown',
+        }));
+        setMessages(messagesWithAuthors);
+      }
+    } catch (error) {
+      console.error('Error in loadMessages:', error);
     }
   };
 
@@ -116,16 +126,52 @@ export function Chat({ tripId }: ChatProps) {
           table: 'messages',
           filter: `trip_id=eq.${tripId}`,
         },
-        (payload) => {
-          setMessages((prev) => [...prev, payload.new as Message]);
+        async (payload) => {
+          console.log('New message received:', payload);
+
+          // Fetch the complete message with author info
+          const { data: newMessageData } = await supabase
+            .from('messages')
+            .select(`
+              *,
+              user_profiles!messages_author_id_fkey (
+                email,
+                display_name
+              )
+            `)
+            .eq('id', payload.new.id)
+            .single();
+
+          if (newMessageData) {
+            const messageWithAuthor = {
+              ...newMessageData,
+              author_name: (newMessageData as any).user_profiles?.display_name || null,
+              author_email: (newMessageData as any).user_profiles?.email || 'Unknown',
+            };
+
+            setMessages((prev) => {
+              // Avoid duplicates
+              if (prev.some(m => m.id === messageWithAuthor.id)) {
+                return prev;
+              }
+              return [...prev, messageWithAuthor];
+            });
+          }
         }
       )
       .subscribe(async (status) => {
+        console.log('Realtime subscription status:', status);
         if (status === 'SUBSCRIBED') {
+          console.log('Successfully subscribed to realtime channel');
           const { data: { user } } = await supabase.auth.getUser();
           if (user) {
             await channel.track({ user_id: user.id, online_at: new Date().toISOString() });
+            console.log('User presence tracked:', user.id);
           }
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('Realtime channel error');
+        } else if (status === 'TIMED_OUT') {
+          console.error('Realtime subscription timed out');
         }
       });
 
@@ -166,23 +212,15 @@ export function Chat({ tripId }: ChatProps) {
       return;
     }
 
-    // Optimistically append the new message
-    if (data) {
-      setMessages((prev) => [
-        ...prev,
-        {
-          ...(data as any),
-          author_name: undefined,
-          author_email: undefined,
-        } as any,
-      ]);
-    } else {
-      // Fallback: reload
-      loadMessages();
-    }
+    console.log('Message sent successfully:', data);
 
+    // Clear input - realtime will handle adding the message to the list
     setNewMessage('');
-    scrollToBottom();
+
+    // Small delay then scroll to show new message when it arrives
+    setTimeout(() => {
+      scrollToBottom();
+    }, 100);
   };
 
   return (
