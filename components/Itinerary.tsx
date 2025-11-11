@@ -49,6 +49,30 @@ export function Itinerary({ tripId }: ItineraryProps) {
   // Per-day Weather widget state
   type WeatherInfo = { name: string; country?: string; temp: number; description?: string | null; icon?: string | null } | null;
   type ForecastItem = { dt: number; min: number; max: number; icon: string | null; description: string | null; precip?: number; wind?: number };
+  // Flight widget typings to avoid complex inline generics in TSX
+  type FlightLeg = {
+    airport?: string | null;
+    scheduled?: string | null;
+    estimated?: string | null;
+    actual?: string | null;
+    gate?: string | null;
+    terminal?: string | null;
+    timezone?: string | null;
+    delay?: number | null;
+  };
+  type FlightInfo = {
+    flight?: string | null;
+    airline?: string | null;
+    departure?: FlightLeg;
+    arrival?: FlightLeg;
+    status?: string | null;
+  } | null;
+  type FlightState = {
+    query: string;
+    loading: boolean;
+    error: string;
+    flight: FlightInfo;
+  };
   const [weatherByDay, setWeatherByDay] = useState<Record<string, {
     query: string;
     loading: boolean;
@@ -59,36 +83,7 @@ export function Itinerary({ tripId }: ItineraryProps) {
     forecastError: string;
   }>>({});
   // Per-day Flight widget state
-  const [flightByDay, setFlightByDay] = useState<Record<string, {
-    query: string;
-    loading: boolean;
-    error: string;
-    flight: {
-      flight?: string | null;
-      airline?: string | null;
-      departure?: {
-        airport?: string | null;
-        scheduled?: string | null;
-        estimated?: string | null;
-        actual?: string | null;
-        gate?: string | null;
-        terminal?: string | null;
-        timezone?: string | null;
-        delay?: number | null;
-      };
-      arrival?: {
-        airport?: string | null;
-        scheduled?: string | null;
-        estimated?: string | null;
-        actual?: string | null;
-        gate?: string | null;
-        terminal?: string | null;
-        timezone?: string | null;
-        delay?: number | null;
-      };
-      status?: string | null;
-    } | null;
-  }>>({}));
+  const [flightByDay, setFlightByDay] = useState<Record<string, FlightState>>({});
   const [trip, setTrip] = useState<{ destination: string | null; lat: number | null; lng: number | null } | null>(null);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -636,7 +631,7 @@ export function Itinerary({ tripId }: ItineraryProps) {
                           {F?.loading ? 'Loading...' : 'Get'}
                         </Button>
                       </div>
-                          </>
+                      </>
                         );
                       })()}
                     </div>
@@ -647,185 +642,186 @@ export function Itinerary({ tripId }: ItineraryProps) {
 
               <div className="space-y-4">
                 {currentDay.activities.map((activity: Activity) => (
-                  <Card key={activity.id} className="p-0 overflow-hidden shadow-sm border-gray-200">
-                    <div className="p-5 flex items-start gap-4">
-                      <div className="text-xs text-gray-600 w-32 shrink-0">
-                        {activity.starts_at ? (
-                          <div>
-                            {activity.starts_at}
-                            {activity.ends_at && (
-                              <span> - {activity.ends_at}</span>
-                            )}
+                  <div key={activity.id} className="space-y-2">
+                    <Card className="p-0 overflow-hidden shadow-sm border-gray-200">
+                      <div className="p-5 flex items-start gap-4">
+                        <div className="text-xs text-gray-600 w-32 shrink-0">
+                          {activity.starts_at ? (
+                            <div>
+                              {activity.starts_at}
+                              {activity.ends_at && (
+                                <span> - {activity.ends_at}</span>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1">
+                              <Clock className="h-3 w-3" />
+                              <span>No time</span>
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex items-start justify-between">
+                            <div>
+                              <div className="text-lg font-semibold text-gray-900">{activity.title}</div>
+                              {activity.location && (
+                                <div className="flex items-center gap-1 text-sm text-gray-600 mt-1">
+                                  <MapPin className="h-3 w-3" />
+                                  {activity.location}
+                                </div>
+                              )}
+                            </div>
+                            <div className="w-24 h-16 rounded-lg bg-gray-200 flex items-center justify-center">
+                              {(() => {
+                                const t = (activity as any).type as string | undefined;
+                                const Icon = t === 'food' ? Utensils : t === 'museum' ? Landmark : t === 'sightseeing' ? Camera : t === 'transport' ? Bus : null;
+                                return Icon ? <Icon className="h-6 w-6 text-gray-700" /> : null;
+                              })()}
+                            </div>
                           </div>
-                        ) : (
-                          <div className="flex items-center gap-1">
-                            <Clock className="h-3 w-3" />
-                            <span>No time</span>
+                          <div className="flex items-center justify-between mt-4 text-sm text-gray-600">
+                            <div className="flex items-center gap-4">
+                              <button className={`flex items-center gap-1 ${likesByActivity[activity.id]?.liked ? 'text-blue-600' : ''}`} onClick={() => toggleLike(activity.id)}>
+                                <ThumbsUp className="h-4 w-4" />{likesByActivity[activity.id]?.count ?? 0}
+                              </button>
+                              <button className="flex items-center gap-1" onClick={() => toggleComments(activity.id)}>
+                                <MessageCircle className="h-4 w-4" />{commentsCountByActivity[activity.id] ?? 0}
+                              </button>
+                            </div>
+                            <Button variant="ghost" size="sm" onClick={() => deleteActivity(activity.id)}>
+                              <X className="h-4 w-4" />
+                            </Button>
                           </div>
-                        )}
+                        </div>
                       </div>
-                      <div className="flex-1">
-                        <div className="flex items-start justify-between">
-                          <div>
-                            <div className="text-lg font-semibold text-gray-900">{activity.title}</div>
-                            {activity.location && (
-                              <div className="flex items-center gap-1 text-sm text-gray-600 mt-1">
-                                <MapPin className="h-3 w-3" />
-                                {activity.location}
+                    </Card>
+                    {openCommentsFor[activity.id] && (
+                      <Card className="p-4">
+                        <div className="space-y-3">
+                          <div className="space-y-2 max-h-52 overflow-auto">
+                            {(commentsByActivity[activity.id] || []).map((c) => (
+                              <div key={c.id} className="text-sm">
+                                <div className="text-gray-900 font-medium">{c.user_name || (c.user_email ? c.user_email.split('@')[0] : 'User')}</div>
+                                <div className="text-gray-700">{c.content}</div>
                               </div>
-                            )}
+                            ))}
                           </div>
-                          <div className="w-24 h-16 rounded-lg bg-gray-200 flex items-center justify-center">
-                            {(() => {
-                              const t = (activity as any).type as string | undefined;
-                              const Icon = t === 'food' ? Utensils : t === 'museum' ? Landmark : t === 'sightseeing' ? Camera : t === 'transport' ? Bus : null;
-                              return Icon ? <Icon className="h-6 w-6 text-gray-700" /> : null;
-                            })()}
+                          <div className="flex gap-2">
+                            <Input
+                              placeholder="Add a comment"
+                              value={newCommentByActivity[activity.id] || ''}
+                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewCommentByActivity((prev) => ({ ...prev, [activity.id]: e.target.value }))}
+                            />
+                            <Button size="sm" onClick={() => addComment(activity.id)} disabled={!(newCommentByActivity[activity.id] || '').trim()}>Send</Button>
                           </div>
                         </div>
-                        <div className="flex items-center justify-between mt-4 text-sm text-gray-600">
-                      <div className="flex items-center gap-4">
-                        <button className={`flex items-center gap-1 ${likesByActivity[activity.id]?.liked ? 'text-blue-600' : ''}`} onClick={() => toggleLike(activity.id)}>
-                          <ThumbsUp className="h-4 w-4" />{likesByActivity[activity.id]?.count ?? 0}
-                        </button>
-                        <button className="flex items-center gap-1" onClick={() => toggleComments(activity.id)}>
-                          <MessageCircle className="h-4 w-4" />{commentsCountByActivity[activity.id] ?? 0}
-                        </button>
-                      </div>
-                      <Button variant="ghost" size="sm" onClick={() => deleteActivity(activity.id)}>
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
+                      </Card>
+                    )}
                   </div>
-                </div>
-              </Card>
-              {openCommentsFor[activity.id] && (
-                <Card className="p-4">
-                  <div className="space-y-3">
-                    <div className="space-y-2 max-h-52 overflow-auto">
-                      {(commentsByActivity[activity.id] || []).map((c) => (
-                        <div key={c.id} className="text-sm">
-                          <div className="text-gray-900 font-medium">{c.user_name || (c.user_email ? c.user_email.split('@')[0] : 'User')}</div>
-                          <div className="text-gray-700">{c.content}</div>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="flex gap-2">
-                      <Input
-                        placeholder="Add a comment"
-                        value={newCommentByActivity[activity.id] || ''}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewCommentByActivity((prev) => ({ ...prev, [activity.id]: e.target.value }))}
-                      />
-                      <Button size="sm" onClick={() => addComment(activity.id)} disabled={!(newCommentByActivity[activity.id] || '').trim()}>Send</Button>
-                    </div>
+                ))}
+              </div>
+
+              {newActivityDayId === currentDay.id && (
+                <Card className="p-4 space-y-2">
+                  <Input
+                    placeholder="Activity title"
+                    value={newActivityTitle}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewActivityTitle(e.target.value)}
+                  />
+                  <div>
+                    <label className="text-xs text-gray-600">Type</label>
+                    <select
+                      className="mt-1 w-full border rounded-md px-2 py-2 text-sm"
+                      value={newActivityType}
+                      onChange={(e) => setNewActivityType(e.target.value as any)}
+                    >
+                      <option value="food">Food</option>
+                      <option value="museum">Museum</option>
+                      <option value="sightseeing">Sightseeing</option>
+                      <option value="transport">Transport</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </div>
+                  <div className="relative">
+                    <Input
+                      placeholder="Location"
+                      value={newActivityLocation}
+                      onChange={async (e: React.ChangeEvent<HTMLInputElement>) => {
+                        const v = e.target.value;
+                        setNewActivityLocation(v);
+                        setPlaceIdForActivity(null);
+                        setPlaceCoordsForActivity({ lat: null, lng: null });
+                        if (placeDebounceRef.current) clearTimeout(placeDebounceRef.current as any);
+                        const t = setTimeout(async () => {
+                          if (!v || v.length < 2) {
+                            setPlacePreds([]);
+                            return;
+                          }
+                          try {
+                            setPlaceLoading(true);
+                            const res = await fetch(`/api/places/autocomplete?q=${encodeURIComponent(v)}`);
+                            const json = await res.json();
+                            setPlacePreds(Array.isArray(json?.predictions) ? json.predictions : []);
+                          } finally {
+                            setPlaceLoading(false);
+                          }
+                        }, 300) as any;
+                        placeDebounceRef.current = t;
+                      }}
+                    />
+                    {newActivityLocation && placePreds.length > 0 && (
+                      <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-md shadow-sm max-h-56 overflow-auto">
+                        {placePreds.map((p) => (
+                          <button
+                            type="button"
+                            key={p.place_id}
+                            className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
+                            onClick={async () => {
+                              setNewActivityLocation(p.description);
+                              setPlacePreds([]);
+                              setPlaceIdForActivity(p.place_id);
+                              try {
+                                const r = await fetch(`/api/places/details?place_id=${encodeURIComponent(p.place_id)}`);
+                                const j = await r.json();
+                                if (j && j.lat != null && j.lng != null) {
+                                  setPlaceCoordsForActivity({ lat: j.lat, lng: j.lng });
+                                } else {
+                                  setPlaceCoordsForActivity({ lat: null, lng: null });
+                                }
+                              } catch {
+                                setPlaceCoordsForActivity({ lat: null, lng: null });
+                              }
+                            }}
+                          >
+                            {p.description}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {placeLoading && (
+                      <div className="text-xs text-gray-500 mt-1">Searching...</div>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    <Input
+                      type="time"
+                      placeholder="Start time"
+                      value={newActivityStartTime}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewActivityStartTime(e.target.value)}
+                    />
+                    <Input
+                      type="time"
+                      placeholder="End time"
+                      value={newActivityEndTime}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewActivityEndTime(e.target.value)}
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <Button onClick={() => addActivity(currentDay.id)} size="sm">Add</Button>
+                    <Button variant="outline" onClick={() => setNewActivityDayId(null)} size="sm">Cancel</Button>
                   </div>
                 </Card>
               )}
-            ))}
-            
-
-                {newActivityDayId === currentDay.id && (
-                  <Card className="p-4 space-y-2">
-                    <Input
-                      placeholder="Activity title"
-                      value={newActivityTitle}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewActivityTitle(e.target.value)}
-                    />
-                    <div>
-                      <label className="text-xs text-gray-600">Type</label>
-                      <select
-                        className="mt-1 w-full border rounded-md px-2 py-2 text-sm"
-                        value={newActivityType}
-                        onChange={(e) => setNewActivityType(e.target.value as any)}
-                      >
-                        <option value="food">Food</option>
-                        <option value="museum">Museum</option>
-                        <option value="sightseeing">Sightseeing</option>
-                        <option value="transport">Transport</option>
-                        <option value="other">Other</option>
-                      </select>
-                    </div>
-                    <div className="relative">
-                      <Input
-                        placeholder="Location"
-                        value={newActivityLocation}
-                        onChange={async (e: React.ChangeEvent<HTMLInputElement>) => {
-                          const v = e.target.value;
-                          setNewActivityLocation(v);
-                          setPlaceIdForActivity(null);
-                          setPlaceCoordsForActivity({ lat: null, lng: null });
-                          if (placeDebounceRef.current) clearTimeout(placeDebounceRef.current as any);
-                          const t = setTimeout(async () => {
-                            if (!v || v.length < 2) {
-                              setPlacePreds([]);
-                              return;
-                            }
-                            try {
-                              setPlaceLoading(true);
-                              const res = await fetch(`/api/places/autocomplete?q=${encodeURIComponent(v)}`);
-                              const json = await res.json();
-                              setPlacePreds(Array.isArray(json?.predictions) ? json.predictions : []);
-                            } finally {
-                              setPlaceLoading(false);
-                            }
-                          }, 300) as any;
-                          placeDebounceRef.current = t;
-                        }}
-                      />
-                      {newActivityLocation && placePreds.length > 0 && (
-                        <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-md shadow-sm max-h-56 overflow-auto">
-                          {placePreds.map((p) => (
-                            <button
-                              type="button"
-                              key={p.place_id}
-                              className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
-                              onClick={async () => {
-                                setNewActivityLocation(p.description);
-                                setPlacePreds([]);
-                                setPlaceIdForActivity(p.place_id);
-                                try {
-                                  const r = await fetch(`/api/places/details?place_id=${encodeURIComponent(p.place_id)}`);
-                                  const j = await r.json();
-                                  if (j && j.lat != null && j.lng != null) {
-                                    setPlaceCoordsForActivity({ lat: j.lat, lng: j.lng });
-                                  } else {
-                                    setPlaceCoordsForActivity({ lat: null, lng: null });
-                                  }
-                                } catch {
-                                  setPlaceCoordsForActivity({ lat: null, lng: null });
-                                }
-                              }}
-                            >
-                              {p.description}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                      {placeLoading && (
-                        <div className="text-xs text-gray-500 mt-1">Searching...</div>
-                      )}
-                    </div>
-                    <div className="flex gap-2">
-                      <Input
-                        type="time"
-                        placeholder="Start time"
-                        value={newActivityStartTime}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewActivityStartTime(e.target.value)}
-                      />
-                      <Input
-                        type="time"
-                        placeholder="End time"
-                        value={newActivityEndTime}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewActivityEndTime(e.target.value)}
-                      />
-                    </div>
-                    <div className="flex gap-2">
-                      <Button onClick={() => addActivity(currentDay.id)} size="sm">Add</Button>
-                      <Button variant="outline" onClick={() => setNewActivityDayId(null)} size="sm">Cancel</Button>
-                    </div>
-                  </Card>
-                )}
-              </div>
             </div>
           );
         })()}
