@@ -34,6 +34,7 @@ export function Chat({ tripId }: ChatProps) {
   useEffect(() => {
     loadMessages();
     getCurrentUser();
+    ensureProfile();
     setupRealtimeChannel();
 
     return () => {
@@ -51,6 +52,22 @@ export function Chat({ tripId }: ChatProps) {
     const { data: { user } } = await supabase.auth.getUser();
     if (user) {
       setCurrentUserId(user.id);
+    }
+  };
+
+  const ensureProfile = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    try {
+      await supabase
+        .from('user_profiles')
+        .upsert({
+          user_id: user.id,
+          email: user.email || `user-${user.id.substring(0, 8)}@example.com`,
+          display_name: (user.user_metadata && (user.user_metadata as any).display_name) || null,
+        } as any, { onConflict: 'user_id' } as any);
+    } catch (e) {
+      // ignore
     }
   };
 
@@ -124,15 +141,48 @@ export function Chat({ tripId }: ChatProps) {
 
     if (!newMessage.trim() || !currentUserId) return;
 
-    const { error } = await supabase.from('messages').insert({
-      trip_id: tripId,
-      author_id: currentUserId,
-      content: newMessage,
-    } as any);
+    const tryInsert = async () => supabase
+      .from('messages')
+      .insert({
+        trip_id: tripId,
+        author_id: currentUserId,
+        content: newMessage,
+      } as any)
+      .select('*')
+      .single();
 
-    if (!error) {
-      setNewMessage('');
+    let { error, data } = await tryInsert();
+    if (error) {
+      // If FK fails due to missing user_profiles, try to upsert profile then retry once
+      await ensureProfile();
+      const retry = await tryInsert();
+      error = retry.error;
+      data = retry.data as any;
     }
+
+    if (error) {
+      console.error('Failed to send message:', error);
+      alert(error.message || 'Failed to send message');
+      return;
+    }
+
+    // Optimistically append the new message
+    if (data) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          ...(data as any),
+          author_name: undefined,
+          author_email: undefined,
+        } as any,
+      ]);
+    } else {
+      // Fallback: reload
+      loadMessages();
+    }
+
+    setNewMessage('');
+    scrollToBottom();
   };
 
   return (
