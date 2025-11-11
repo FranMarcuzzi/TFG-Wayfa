@@ -90,6 +90,7 @@ export type Database = {
           starts_at: string | null;
           ends_at: string | null;
           location: string | null;
+          type: 'food' | 'museum' | 'sightseeing' | 'transport' | 'other' | null;
         };
         Insert: {
           id?: string;
@@ -98,6 +99,7 @@ export type Database = {
           starts_at?: string | null;
           ends_at?: string | null;
           location?: string | null;
+          type?: 'food' | 'museum' | 'sightseeing' | 'transport' | 'other' | null;
         };
         Update: {
           id?: string;
@@ -106,6 +108,7 @@ export type Database = {
           starts_at?: string | null;
           ends_at?: string | null;
           location?: string | null;
+          type?: 'food' | 'museum' | 'sightseeing' | 'transport' | 'other' | null;
         };
       };
       messages: {

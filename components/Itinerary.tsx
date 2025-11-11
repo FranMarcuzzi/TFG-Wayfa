@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { supabase } from '@/lib/supabase/client';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -37,44 +37,56 @@ export function Itinerary({ tripId }: ItineraryProps) {
   const [newActivityLocation, setNewActivityLocation] = useState('');
   const [newActivityStartTime, setNewActivityStartTime] = useState('');
   const [newActivityEndTime, setNewActivityEndTime] = useState('');
+  const [newActivityType, setNewActivityType] = useState<'food' | 'museum' | 'sightseeing' | 'transport' | 'other'>('other');
   const [selectedDayId, setSelectedDayId] = useState<string | null>(null);
-  // Weather widget state
-  const [weatherQuery, setWeatherQuery] = useState<string>('');
-  const [weatherLoading, setWeatherLoading] = useState<boolean>(false);
-  const [weatherError, setWeatherError] = useState<string>('');
-  const [weather, setWeather] = useState<{ name: string; country?: string; temp: number; description?: string | null; icon?: string | null } | null>(null);
-  const [forecast, setForecast] = useState<Array<{ dt: number; min: number; max: number; icon: string | null; description: string | null; precip?: number; wind?: number }>>([]);
-  const [forecastLoading, setForecastLoading] = useState<boolean>(false);
-  const [forecastError, setForecastError] = useState<string>('');
-  // Flight widget state
-  const [flightQuery, setFlightQuery] = useState<string>('');
-  const [flightLoading, setFlightLoading] = useState<boolean>(false);
-  const [flightError, setFlightError] = useState<string>('');
-  const [flight, setFlight] = useState<{
-    flight?: string | null;
-    airline?: string | null;
-    departure?: {
-      airport?: string | null;
-      scheduled?: string | null;
-      estimated?: string | null;
-      actual?: string | null;
-      gate?: string | null;
-      terminal?: string | null;
-      timezone?: string | null;
-      delay?: number | null;
-    };
-    arrival?: {
-      airport?: string | null;
-      scheduled?: string | null;
-      estimated?: string | null;
-      actual?: string | null;
-      gate?: string | null;
-      terminal?: string | null;
-      timezone?: string | null;
-      delay?: number | null;
-    };
-    status?: string | null;
-  } | null>(null);
+  const [placePreds, setPlacePreds] = useState<{ description: string; place_id: string }[]>([]);
+  const [placeLoading, setPlaceLoading] = useState(false);
+  const placeDebounceRef = useRef<NodeJS.Timeout | null>(null);
+  const [placeIdForActivity, setPlaceIdForActivity] = useState<string | null>(null);
+  const [placeCoordsForActivity, setPlaceCoordsForActivity] = useState<{ lat: number | null; lng: number | null }>({ lat: null, lng: null });
+  // Per-day Weather widget state
+  type WeatherInfo = { name: string; country?: string; temp: number; description?: string | null; icon?: string | null } | null;
+  type ForecastItem = { dt: number; min: number; max: number; icon: string | null; description: string | null; precip?: number; wind?: number };
+  const [weatherByDay, setWeatherByDay] = useState<Record<string, {
+    query: string;
+    loading: boolean;
+    error: string;
+    weather: WeatherInfo;
+    forecast: ForecastItem[];
+    forecastLoading: boolean;
+    forecastError: string;
+  }>>({});
+  // Per-day Flight widget state
+  const [flightByDay, setFlightByDay] = useState<Record<string, {
+    query: string;
+    loading: boolean;
+    error: string;
+    flight: {
+      flight?: string | null;
+      airline?: string | null;
+      departure?: {
+        airport?: string | null;
+        scheduled?: string | null;
+        estimated?: string | null;
+        actual?: string | null;
+        gate?: string | null;
+        terminal?: string | null;
+        timezone?: string | null;
+        delay?: number | null;
+      };
+      arrival?: {
+        airport?: string | null;
+        scheduled?: string | null;
+        estimated?: string | null;
+        actual?: string | null;
+        gate?: string | null;
+        terminal?: string | null;
+        timezone?: string | null;
+        delay?: number | null;
+      };
+      status?: string | null;
+    } | null;
+  }>>({});
   const [trip, setTrip] = useState<{ destination: string | null; lat: number | null; lng: number | null } | null>(null);
 
   useEffect(() => {
@@ -124,51 +136,74 @@ export function Itinerary({ tripId }: ItineraryProps) {
 
     if (data) {
       setTrip({ destination: (data as any).destination ?? null, lat: (data as any).lat ?? null, lng: (data as any).lng ?? null });
-      // Pre-fill weather if we have a destination text
-      const dest = (data as any).destination as string | null;
-      if (dest && !weather) {
-        setWeatherQuery(dest);
-        try {
-          setWeatherLoading(true);
-          setWeatherError('');
-          const res = await fetch(`/api/weather?q=${encodeURIComponent(dest)}`);
-          const json = await res.json();
-          if (!res.ok || json.error) throw new Error(json.error || 'Failed');
-          setWeather(json);
-        } catch (err: any) {
-          setWeather(null);
-          setWeatherError(err?.message || 'Failed to fetch weather');
-        } finally {
-          setWeatherLoading(false);
-        }
-      }
-
-      // Load 7-day forecast using lat/lng if available, otherwise fallback to destination name
-      const lat = (data as any).lat as number | null;
-      const lng = (data as any).lng as number | null;
-      if (lat != null && lng != null) {
-        fetchForecast(lat, lng, null);
-      } else if (dest) {
-        fetchForecast(null, null, dest);
-      }
+      // No prefill per-day here; user sets city per day.
     }
   };
 
-  const fetchForecast = async (lat: number | null, lng: number | null, q: string | null) => {
+  const ensureDayWeather = (dayId: string) => {
+    setWeatherByDay((prev) => (
+      prev[dayId]
+        ? prev
+        : { ...prev, [dayId]: { query: '', loading: false, error: '', weather: null, forecast: [], forecastLoading: false, forecastError: '' } }
+    ));
+  };
+
+  const fetchForecastForDay = async (dayId: string, lat: number | null, lng: number | null, q: string | null) => {
+    setWeatherByDay((prev) => ({
+      ...prev,
+      [dayId]: { ...(prev[dayId] || { query: '', loading: false, error: '', weather: null, forecast: [], forecastLoading: false, forecastError: '' }), forecastLoading: true, forecastError: '' },
+    }));
     try {
-      setForecastLoading(true);
-      setForecastError('');
       const params = lat != null && lng != null ? `lat=${lat}&lng=${lng}` : q ? `q=${encodeURIComponent(q)}` : '';
-      if (!params) return;
+      if (!params) throw new Error('Missing query');
       const res = await fetch(`/api/weather/forecast?${params}`);
       const json = await res.json();
       if (!res.ok || json.error) throw new Error(json.error || 'Failed');
-      setForecast(Array.isArray(json.daily) ? json.daily : []);
+      setWeatherByDay((prev) => ({
+        ...prev,
+        [dayId]: { ...(prev[dayId] as any), forecast: Array.isArray(json.daily) ? json.daily : [], forecastLoading: false },
+      }));
     } catch (err: any) {
-      setForecast([]);
-      setForecastError(err?.message || 'Failed to fetch forecast');
-    } finally {
-      setForecastLoading(false);
+      setWeatherByDay((prev) => ({
+        ...prev,
+        [dayId]: { ...(prev[dayId] as any), forecast: [], forecastLoading: false, forecastError: err?.message || 'Failed to fetch forecast' },
+      }));
+    }
+  };
+
+  const getWeatherForDay = async (dayId: string) => {
+    const state = weatherByDay[dayId];
+    const query = state?.query || '';
+    if (!query) return;
+    setWeatherByDay((prev) => ({ ...prev, [dayId]: { ...(prev[dayId] as any), loading: true, error: '' } }));
+    try {
+      const res = await fetch(`/api/weather?q=${encodeURIComponent(query)}`);
+      const json = await res.json();
+      if (!res.ok || json.error) throw new Error(json.error || 'Failed');
+      setWeatherByDay((prev) => ({ ...prev, [dayId]: { ...(prev[dayId] as any), weather: json, loading: false } }));
+      await fetchForecastForDay(dayId, null, null, query);
+    } catch (err: any) {
+      setWeatherByDay((prev) => ({ ...prev, [dayId]: { ...(prev[dayId] as any), weather: null, loading: false, error: err?.message || 'Failed to fetch weather' } }));
+    }
+  };
+
+  const ensureDayFlight = (dayId: string) => {
+    setFlightByDay((prev) => (prev[dayId] ? prev : { ...prev, [dayId]: { query: '', loading: false, error: '', flight: null } }));
+  };
+
+  const getFlightForDay = async (dayId: string) => {
+    const state = flightByDay[dayId];
+    const query = state?.query || '';
+    if (!query) return;
+    setFlightByDay((prev) => ({ ...prev, [dayId]: { ...(prev[dayId] as any), loading: true, error: '' } }));
+    try {
+      const res = await fetch(`/api/flight?flight=${encodeURIComponent(query)}`);
+      const json = await res.json();
+      if (!res.ok || json.error) throw new Error(json.error || 'Failed');
+      if (json.notFound) throw new Error('Flight not found');
+      setFlightByDay((prev) => ({ ...prev, [dayId]: { ...(prev[dayId] as any), flight: json, loading: false } }));
+    } catch (err: any) {
+      setFlightByDay((prev) => ({ ...prev, [dayId]: { ...(prev[dayId] as any), flight: null, loading: false, error: err?.message || 'Failed to fetch flight' } }));
     }
   };
 
@@ -208,13 +243,15 @@ export function Itinerary({ tripId }: ItineraryProps) {
 
   const addActivity = async (dayId: string) => {
     if (!newActivityTitle.trim()) return;
-
+    const dayBefore = days.find((d: Day) => d.id === dayId);
+    const wasFirst = dayBefore ? (dayBefore.activities?.length || 0) === 0 : false;
     const { error } = await supabase.from('activities').insert({
       day_id: dayId,
       title: newActivityTitle,
       location: newActivityLocation || null,
       starts_at: newActivityStartTime || null,
       ends_at: newActivityEndTime || null,
+      type: newActivityType,
     } as any);
 
     if (!error) {
@@ -223,11 +260,41 @@ export function Itinerary({ tripId }: ItineraryProps) {
       setNewActivityLocation('');
       setNewActivityStartTime('');
       setNewActivityEndTime('');
+      setNewActivityType('other');
+      setPlacePreds([]);
+      setPlaceIdForActivity(null);
+      setPlaceCoordsForActivity({ lat: null, lng: null });
+      if (wasFirst && (newActivityLocation || placeIdForActivity)) {
+        const query = newActivityLocation;
+        const coords = placeCoordsForActivity;
+        setWeatherByDay((prev) => ({
+          ...prev,
+          [dayId]: {
+            ...(prev[dayId] || { query: '', loading: false, error: '', weather: null, forecast: [], forecastLoading: false, forecastError: '' }),
+            query,
+          },
+        }));
+        try {
+          const res = await fetch(`/api/weather?q=${encodeURIComponent(query)}`);
+          const json = await res.json();
+          if (res.ok && !json.error) {
+            setWeatherByDay((prev) => ({ ...prev, [dayId]: { ...(prev[dayId] as any), weather: json } }));
+          }
+        } catch {}
+        if (coords.lat != null && coords.lng != null) {
+          await fetchForecastForDay(dayId, coords.lat, coords.lng, null);
+        } else if (query) {
+          await fetchForecastForDay(dayId, null, null, query);
+        }
+      }
+      // refresh activities list
+      await loadDays();
     }
   };
 
   const deleteActivity = async (activityId: string) => {
     await supabase.from('activities').delete().eq('id', activityId);
+    await loadDays();
   };
 
   if (loading) {
@@ -329,10 +396,14 @@ export function Itinerary({ tripId }: ItineraryProps) {
                 <Card className="p-5">
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
-                      <div className="flex items-center gap-2 text-3xl font-semibold text-gray-900">
-                        {weather ? (
+                      {(() => {
+                        const W = weatherByDay[currentDay.id] || { query: '', loading: false, error: '', weather: null, forecast: [], forecastLoading: false, forecastError: '' };
+                        return (
                           <>
-                            {weather.temp}°C
+                      <div className="flex items-center gap-2 text-3xl font-semibold text-gray-900">
+                        {W?.weather ? (
+                          <>
+                            {W.weather.temp}°C
                             <Sun className="h-6 w-6 text-yellow-500" />
                           </>
                         ) : (
@@ -342,52 +413,36 @@ export function Itinerary({ tripId }: ItineraryProps) {
                         )}
                       </div>
                       <div className="text-sm text-gray-600">
-                        {weather
-                          ? `${weather.name}${weather.country ? ', ' + weather.country : ''} • ${weather.description ?? 'Weather'}`
+                        {W?.weather
+                          ? `${W.weather.name}${W.weather.country ? ', ' + W.weather.country : ''} • ${W.weather.description ?? 'Weather'}`
                           : 'Enter a city to fetch the weather'}
                       </div>
-                      {weatherError && (
-                        <div className="text-xs text-red-600 mt-1">{weatherError}</div>
+                      {W?.error && (
+                        <div className="text-xs text-red-600 mt-1">{W.error}</div>
                       )}
-                      {forecastError && (
-                        <div className="text-xs text-red-600 mt-1">{forecastError}</div>
+                      {W?.forecastError && (
+                        <div className="text-xs text-red-600 mt-1">{W.forecastError}</div>
                       )}
                       <div className="flex items-center gap-2 mt-3">
                         <Input
                           placeholder="City (e.g., Rome,IT)"
-                          value={weatherQuery}
-                          onChange={(e) => setWeatherQuery(e.target.value)}
+                          value={W?.query || ''}
+                          onChange={(e) => setWeatherByDay((prev) => ({ ...prev, [currentDay.id]: { ...(prev[currentDay.id] as any), query: e.target.value } }))}
                         />
                         <Button
                           size="sm"
-                          disabled={weatherLoading || !weatherQuery}
-                          onClick={async () => {
-                            try {
-                              setWeatherLoading(true);
-                              setWeatherError('');
-                              const res = await fetch(`/api/weather?q=${encodeURIComponent(weatherQuery)}`);
-                              const json = await res.json();
-                              if (!res.ok || json.error) throw new Error(json.error || 'Failed');
-                              setWeather(json);
-                              // also refresh forecast based on query
-                              fetchForecast(null, null, weatherQuery);
-                            } catch (err: any) {
-                              setWeather(null);
-                              setWeatherError(err?.message || 'Failed to fetch weather');
-                            } finally {
-                              setWeatherLoading(false);
-                            }
-                          }}
+                          disabled={W?.loading || !(W?.query)}
+                          onClick={() => getWeatherForDay(currentDay.id)}
                         >
-                          {weatherLoading ? 'Loading...' : 'Get'}
+                          {W?.loading ? 'Loading...' : 'Get'}
                         </Button>
                       </div>
                       <div className="mt-4">
-                        {forecastLoading ? (
-                          <div className="text-xs text-gray-500">Loading 7-day forecast...</div>
-                        ) : forecast && forecast.length > 0 ? (
+                        {W?.forecastLoading ? (
+                          <div className="text-xs text-gray-500">Loading forecast...</div>
+                        ) : W?.forecast && W.forecast.length > 0 ? (
                           <div className="grid grid-cols-7 gap-2">
-                            {forecast.map((d) => (
+                            {W.forecast.map((d) => (
                               <div key={d.dt} className="text-center text-xs p-2 border rounded-md">
                                 <div className="font-medium">{new Date(d.dt * 1000).toLocaleDateString(undefined, { weekday: 'short' })}</div>
                                 <div className="text-gray-500">{new Date(d.dt * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</div>
@@ -400,6 +455,8 @@ export function Itinerary({ tripId }: ItineraryProps) {
                                 </div>
                                 <div className="font-semibold">{d.max}°</div>
                                 <div className="text-gray-500">{d.min}°</div>
+                                {typeof d.precip === 'number' && <div className="text-blue-600">{d.precip} mm</div>}
+                                {typeof d.wind === 'number' && <div className="text-gray-600">{d.wind} km/h</div>}
                               </div>
                             ))}
                           </div>
@@ -407,6 +464,9 @@ export function Itinerary({ tripId }: ItineraryProps) {
                           <div className="text-xs text-gray-500">No forecast available</div>
                         )}
                       </div>
+                          </>
+                        );
+                      })()}
                     </div>
                     <div className="text-sm text-gray-500">Weather</div>
                   </div>
@@ -415,80 +475,68 @@ export function Itinerary({ tripId }: ItineraryProps) {
                 <Card className="p-5">
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
+                      {(() => {
+                        const F = flightByDay[currentDay.id] || { query: '', loading: false, error: '', flight: null };
+                        return (
+                          <>
                       <div className="text-sm text-gray-500">Flight Status</div>
-                      <div className="font-semibold text-gray-900">{flight?.flight || 'Enter flight code'}</div>
-                      {flight?.departure?.airport && flight?.arrival?.airport && (
+                      <div className="font-semibold text-gray-900">{F?.flight?.flight || 'Enter flight code'}</div>
+                      {F?.flight?.departure?.airport && F?.flight?.arrival?.airport && (
                         <div className="text-sm text-gray-600">
-                          {flight.departure.airport} → {flight.arrival.airport}
+                          {F.flight!.departure!.airport} → {F.flight!.arrival!.airport}
                         </div>
                       )}
-                      {flight?.status && (
+                      {F?.flight?.status && (
                         <div className="text-sm mt-2">
-                          <span className={flight.status === 'cancelled' ? 'text-red-600 font-medium' : 'text-green-600 font-medium'}>
-                            {flight.status}
+                          <span className={F.flight!.status === 'cancelled' ? 'text-red-600 font-medium' : 'text-green-600 font-medium'}>
+                            {F.flight!.status}
                           </span>
                         </div>
                       )}
-                      {flight && (
+                      {F?.flight && (
                         <div className="mt-3 grid grid-cols-2 gap-3 text-xs text-gray-700">
                           <div>
                             <div className="font-semibold text-gray-900">Departure</div>
-                            {flight.departure?.scheduled && <div>Scheduled: {new Date(flight.departure.scheduled).toLocaleString()}</div>}
-                            {flight.departure?.estimated && <div>Estimated: {new Date(flight.departure.estimated).toLocaleString()}</div>}
-                            {flight.departure?.actual && <div>Actual: {new Date(flight.departure.actual).toLocaleString()}</div>}
-                            {(flight.departure?.terminal || flight.departure?.gate) && (
-                              <div>Terminal/Gate: {flight.departure.terminal || '-'} / {flight.departure.gate || '-'}</div>
+                            {F.flight.departure?.scheduled && <div>Scheduled: {new Date(F.flight.departure.scheduled).toLocaleString()}</div>}
+                            {F.flight.departure?.estimated && <div>Estimated: {new Date(F.flight.departure.estimated).toLocaleString()}</div>}
+                            {F.flight.departure?.actual && <div>Actual: {new Date(F.flight.departure.actual).toLocaleString()}</div>}
+                            {(F.flight.departure?.terminal || F.flight.departure?.gate) && (
+                              <div>Terminal/Gate: {F.flight.departure.terminal || '-'} / {F.flight.departure.gate || '-'}</div>
                             )}
-                            {typeof flight.departure?.delay === 'number' && <div>Delay: {flight.departure.delay} min</div>}
+                            {typeof F.flight.departure?.delay === 'number' && <div>Delay: {F.flight.departure.delay} min</div>}
                           </div>
                           <div>
                             <div className="font-semibold text-gray-900">Arrival</div>
-                            {flight.arrival?.scheduled && <div>Scheduled: {new Date(flight.arrival.scheduled).toLocaleString()}</div>}
-                            {flight.arrival?.estimated && <div>Estimated: {new Date(flight.arrival.estimated).toLocaleString()}</div>}
-                            {flight.arrival?.actual && <div>Actual: {new Date(flight.arrival.actual).toLocaleString()}</div>}
-                            {(flight.arrival?.terminal || flight.arrival?.gate) && (
-                              <div>Terminal/Gate: {flight.arrival.terminal || '-'} / {flight.arrival.gate || '-'}</div>
+                            {F.flight.arrival?.scheduled && <div>Scheduled: {new Date(F.flight.arrival.scheduled).toLocaleString()}</div>}
+                            {F.flight.arrival?.estimated && <div>Estimated: {new Date(F.flight.arrival.estimated).toLocaleString()}</div>}
+                            {F.flight.arrival?.actual && <div>Actual: {new Date(F.flight.arrival.actual).toLocaleString()}</div>}
+                            {(F.flight.arrival?.terminal || F.flight.arrival?.gate) && (
+                              <div>Terminal/Gate: {F.flight.arrival.terminal || '-'} / {F.flight.arrival.gate || '-'}</div>
                             )}
-                            {typeof flight.arrival?.delay === 'number' && <div>Delay: {flight.arrival.delay} min</div>}
+                            {typeof F.flight.arrival?.delay === 'number' && <div>Delay: {F.flight.arrival.delay} min</div>}
                           </div>
                         </div>
                       )}
-                      {flightError && (
-                        <div className="text-xs text-red-600 mt-1">{flightError}</div>
+                      {F?.error && (
+                        <div className="text-xs text-red-600 mt-1">{F.error}</div>
                       )}
                       <div className="flex items-center gap-2 mt-3">
                         <Input
                           placeholder="Flight IATA (e.g., AZ611)"
-                          value={flightQuery}
-                          onChange={(e) => setFlightQuery(e.target.value.toUpperCase())}
+                          value={(F?.query || '').toUpperCase()}
+                          onChange={(e) => setFlightByDay((prev) => ({ ...prev, [currentDay.id]: { ...(prev[currentDay.id] as any), query: e.target.value.toUpperCase() } }))}
                         />
                         <Button
                           size="sm"
-                          disabled={flightLoading || !flightQuery}
-                          onClick={async () => {
-                            try {
-                              setFlightLoading(true);
-                              setFlightError('');
-                              const res = await fetch(`/api/flight?flight=${encodeURIComponent(flightQuery)}`);
-                              const json = await res.json();
-                              if (!res.ok || json.error) throw new Error(json.error || 'Failed');
-                              if (json.notFound) {
-                                setFlight(null);
-                                setFlightError('Flight not found');
-                              } else {
-                                setFlight(json);
-                              }
-                            } catch (err: any) {
-                              setFlight(null);
-                              setFlightError(err?.message || 'Failed to fetch flight');
-                            } finally {
-                              setFlightLoading(false);
-                            }
-                          }}
+                          disabled={F?.loading || !(F?.query)}
+                          onClick={() => getFlightForDay(currentDay.id)}
                         >
-                          {flightLoading ? 'Loading...' : 'Get'}
+                          {F?.loading ? 'Loading...' : 'Get'}
                         </Button>
                       </div>
+                          </>
+                        );
+                      })()}
                     </div>
                     <Plane className="h-6 w-6 text-gray-400" />
                   </div>
@@ -525,22 +573,29 @@ export function Itinerary({ tripId }: ItineraryProps) {
                               </div>
                             )}
                           </div>
-                          <div className="w-24 h-16 rounded-lg bg-gray-200" />
+                          <div className="w-24 h-16 rounded-lg bg-gray-200 flex items-center justify-center">
+                            {(() => {
+                              const t = (activity as any).type as string | undefined;
+                              const map: Record<string, string> = { food: 'Food', museum: 'Museum', sightseeing: 'Sight', transport: 'Transport', other: 'Other' };
+                              return t ? <span className="text-[10px] font-medium bg-gray-900 text-white px-2 py-1 rounded">{map[t] || 'Other'}</span> : null;
+                            })()}
+                          </div>
                         </div>
                         <div className="flex items-center justify-between mt-4 text-sm text-gray-600">
-                          <div className="flex items-center gap-4">
-                            <div className="flex items-center gap-1"><Users className="h-4 w-4" />3</div>
-                            <div className="flex items-center gap-1"><ThumbsUp className="h-4 w-4" />2</div>
-                            <div className="flex items-center gap-1"><MessageCircle className="h-4 w-4" />1</div>
-                          </div>
-                          <Button variant="ghost" size="sm" onClick={() => deleteActivity(activity.id)}>
-                            <X className="h-4 w-4" />
-                          </Button>
-                        </div>
+                      <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-1"><Users className="h-4 w-4" />3</div>
+                        <div className="flex items-center gap-1"><ThumbsUp className="h-4 w-4" />2</div>
+                        <div className="flex items-center gap-1"><MessageCircle className="h-4 w-4" />1</div>
                       </div>
+                      <Button variant="ghost" size="sm" onClick={() => deleteActivity(activity.id)}>
+                        <X className="h-4 w-4" />
+                      </Button>
                     </div>
-                  </Card>
-                ))}
+                  </div>
+                </div>
+              </Card>
+            ))}
+            
 
                 {newActivityDayId === currentDay.id && (
                   <Card className="p-4 space-y-2">
@@ -549,11 +604,80 @@ export function Itinerary({ tripId }: ItineraryProps) {
                       value={newActivityTitle}
                       onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewActivityTitle(e.target.value)}
                     />
-                    <Input
-                      placeholder="Location"
-                      value={newActivityLocation}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewActivityLocation(e.target.value)}
-                    />
+                    <div>
+                      <label className="text-xs text-gray-600">Type</label>
+                      <select
+                        className="mt-1 w-full border rounded-md px-2 py-2 text-sm"
+                        value={newActivityType}
+                        onChange={(e) => setNewActivityType(e.target.value as any)}
+                      >
+                        <option value="food">Food</option>
+                        <option value="museum">Museum</option>
+                        <option value="sightseeing">Sightseeing</option>
+                        <option value="transport">Transport</option>
+                        <option value="other">Other</option>
+                      </select>
+                    </div>
+                    <div className="relative">
+                      <Input
+                        placeholder="Location"
+                        value={newActivityLocation}
+                        onChange={async (e: React.ChangeEvent<HTMLInputElement>) => {
+                          const v = e.target.value;
+                          setNewActivityLocation(v);
+                          setPlaceIdForActivity(null);
+                          setPlaceCoordsForActivity({ lat: null, lng: null });
+                          if (placeDebounceRef.current) clearTimeout(placeDebounceRef.current as any);
+                          const t = setTimeout(async () => {
+                            if (!v || v.length < 2) {
+                              setPlacePreds([]);
+                              return;
+                            }
+                            try {
+                              setPlaceLoading(true);
+                              const res = await fetch(`/api/places/autocomplete?q=${encodeURIComponent(v)}`);
+                              const json = await res.json();
+                              setPlacePreds(Array.isArray(json?.predictions) ? json.predictions : []);
+                            } finally {
+                              setPlaceLoading(false);
+                            }
+                          }, 300) as any;
+                          placeDebounceRef.current = t;
+                        }}
+                      />
+                      {newActivityLocation && placePreds.length > 0 && (
+                        <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-md shadow-sm max-h-56 overflow-auto">
+                          {placePreds.map((p) => (
+                            <button
+                              type="button"
+                              key={p.place_id}
+                              className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
+                              onClick={async () => {
+                                setNewActivityLocation(p.description);
+                                setPlacePreds([]);
+                                setPlaceIdForActivity(p.place_id);
+                                try {
+                                  const r = await fetch(`/api/places/details?place_id=${encodeURIComponent(p.place_id)}`);
+                                  const j = await r.json();
+                                  if (j && j.lat != null && j.lng != null) {
+                                    setPlaceCoordsForActivity({ lat: j.lat, lng: j.lng });
+                                  } else {
+                                    setPlaceCoordsForActivity({ lat: null, lng: null });
+                                  }
+                                } catch {
+                                  setPlaceCoordsForActivity({ lat: null, lng: null });
+                                }
+                              }}
+                            >
+                              {p.description}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {placeLoading && (
+                        <div className="text-xs text-gray-500 mt-1">Searching...</div>
+                      )}
+                    </div>
                     <div className="flex gap-2">
                       <Input
                         type="time"
