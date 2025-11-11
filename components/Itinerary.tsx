@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Plus, Clock, MapPin, X, Sun, Plane, Users, ThumbsUp, MessageCircle } from 'lucide-react';
 import { TripMembers } from '@/components/TripMembers';
+import { Chat } from '@/components/Chat';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
 
 interface Activity {
   id: string;
@@ -88,6 +90,7 @@ export function Itinerary({ tripId }: ItineraryProps) {
     } | null;
   }>>({});
   const [trip, setTrip] = useState<{ destination: string | null; lat: number | null; lng: number | null } | null>(null);
+  const [isChatOpen, setIsChatOpen] = useState(false);
 
   useEffect(() => {
     loadDays();
@@ -703,6 +706,43 @@ export function Itinerary({ tripId }: ItineraryProps) {
           );
         })()}
       </div>
+
+      {/* Chat launcher */}
+      <Button
+        className="fixed bottom-6 right-6 rounded-full shadow-lg h-12 w-12 p-0"
+        size="icon"
+        onClick={() => setIsChatOpen(true)}
+        aria-label="Open chat"
+      >
+        <MessageCircle className="h-5 w-5" />
+      </Button>
+
+      {/* Mobile: modal dialog */}
+      <div className="lg:hidden">
+        <Dialog open={isChatOpen} onOpenChange={setIsChatOpen}>
+          <DialogContent className="max-w-2xl p-0">
+            <Chat tripId={tripId} />
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      {/* Desktop: side panel */}
+      {isChatOpen && (
+        <div className="hidden lg:flex fixed right-0 top-0 h-full w-[380px] bg-white border-l shadow-xl z-50">
+          <div className="flex-1 flex flex-col">
+            <div className="p-2 border-b flex justify-between items-center">
+              <div className="font-medium">Chat</div>
+              <Button variant="ghost" size="icon" onClick={() => setIsChatOpen(false)} aria-label="Close chat">
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <div className="flex-1 overflow-auto p-2">
+              <Chat tripId={tripId} />
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
