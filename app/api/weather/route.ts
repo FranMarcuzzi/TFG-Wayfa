@@ -4,6 +4,8 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const q = searchParams.get('q'); // e.g., "Rome,IT" or just "Rome"
+    const lat = searchParams.get('lat');
+    const lng = searchParams.get('lng');
 
     const apiKey = process.env.OPENWEATHER_API_KEY;
     if (!apiKey) {
@@ -13,13 +15,14 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    if (!q) {
-      return NextResponse.json({ error: 'Missing query param q' }, { status: 400 });
+    let url = '';
+    if (lat && lng) {
+      url = `https://api.openweathermap.org/data/2.5/weather?lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lng)}&appid=${apiKey}&units=metric`;
+    } else if (q) {
+      url = `https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(q)}&appid=${apiKey}&units=metric`;
+    } else {
+      return NextResponse.json({ error: 'Missing lat/lng or q' }, { status: 400 });
     }
-
-    const url = `https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(
-      q
-    )}&appid=${apiKey}&units=metric`;
 
     const res = await fetch(url, { cache: 'no-store' });
     if (!res.ok) {

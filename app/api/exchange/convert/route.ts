@@ -14,17 +14,18 @@ export async function GET(req: NextRequest) {
 
     const key = process.env.EXCHANGERATE_HOST_API_KEY;
     const base = 'https://api.exchangerate.host/convert';
+    // Docs: exchangerate.host supports optional access_key param (if on apilayer plan)
     const url = `${base}?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&amount=${encodeURIComponent(
       String(amount)
-    )}${key ? `&apikey=${encodeURIComponent(key)}` : ''}`;
+    )}${key ? `&access_key=${encodeURIComponent(key)}` : ''}`;
 
     const res = await fetch(url, { cache: 'no-store' });
     const json = await res.json();
-    if (!res.ok || !json || (json.success === false)) {
+    if (!res.ok || !json || json.error || (json.success === false)) {
       return NextResponse.json({ error: 'FX error', details: json }, { status: 502 });
     }
 
-    const rate = typeof json.info?.rate === 'number' ? json.info.rate : null;
+    const rate = typeof json.info?.rate === 'number' ? json.info.rate : (typeof json.result === 'number' && amount !== 0 ? json.result / amount : null);
     const result = typeof json.result === 'number' ? json.result : null;
     return NextResponse.json({ rate, result, query: { from, to, amount } });
   } catch (e: any) {

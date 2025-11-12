@@ -90,6 +90,9 @@ export type Database = {
           starts_at: string | null;
           ends_at: string | null;
           location: string | null;
+          place_id: string | null;
+          lat: number | null;
+          lng: number | null;
           type: 'food' | 'museum' | 'sightseeing' | 'transport' | 'other' | null;
         };
         Insert: {
@@ -99,6 +102,9 @@ export type Database = {
           starts_at?: string | null;
           ends_at?: string | null;
           location?: string | null;
+          place_id?: string | null;
+          lat?: number | null;
+          lng?: number | null;
           type?: 'food' | 'museum' | 'sightseeing' | 'transport' | 'other' | null;
         };
         Update: {
@@ -108,6 +114,9 @@ export type Database = {
           starts_at?: string | null;
           ends_at?: string | null;
           location?: string | null;
+          place_id?: string | null;
+          lat?: number | null;
+          lng?: number | null;
           type?: 'food' | 'museum' | 'sightseeing' | 'transport' | 'other' | null;
         };
       };

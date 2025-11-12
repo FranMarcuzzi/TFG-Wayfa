@@ -34,11 +34,14 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ notFound: true });
     }
 
+    const departBest = item.departure?.estimated || item.departure?.scheduled || item.departure?.actual || null;
+    const arriveBest = item.arrival?.estimated || item.arrival?.scheduled || item.arrival?.actual || null;
     const payload = {
       flight: item.flight?.iata || item.flight?.icao || flight,
       airline: item.airline?.name || null,
       departure: {
         airport: item.departure?.airport || null,
+        best: departBest,
         scheduled: item.departure?.scheduled || null,
         estimated: item.departure?.estimated || null,
         actual: item.departure?.actual || null,
@@ -49,6 +52,7 @@ export async function GET(req: NextRequest) {
       },
       arrival: {
         airport: item.arrival?.airport || null,
+        best: arriveBest,
         scheduled: item.arrival?.scheduled || null,
         estimated: item.arrival?.estimated || null,
         actual: item.arrival?.actual || null,

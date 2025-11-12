@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Plus, Clock, MapPin, X, Sun, Plane, ThumbsUp, MessageCircle, Utensils, Landmark, Camera, Bus } from 'lucide-react';
 import { TripMembers } from '@/components/TripMembers';
+import { DayMap } from '@/components/DayMap';
+import { Expenses } from '@/components/Expenses';
 import { Chat } from '@/components/Chat';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 
@@ -51,6 +53,7 @@ export function Itinerary({ tripId }: ItineraryProps) {
   type ForecastItem = { dt: number; min: number; max: number; icon: string | null; description: string | null; precip?: number; wind?: number };
   // Flight widget typings to avoid complex inline generics in TSX
   type FlightLeg = {
+    best?: string | null;
     airport?: string | null;
     scheduled?: string | null;
     estimated?: string | null;
@@ -59,6 +62,46 @@ export function Itinerary({ tripId }: ItineraryProps) {
     terminal?: string | null;
     timezone?: string | null;
     delay?: number | null;
+  };
+
+  // Resolve and persist missing coordinates for activities that have a place_id
+  const backfillMissingCoords = async (daysList: Day[]) => {
+    const key = `wayfa:actcoords:${tripId}`;
+    let saved: Record<string, Record<string, { lat: number; lng: number }>> = {};
+    try { saved = JSON.parse(localStorage.getItem(key) || '{}'); } catch {}
+
+    let changed = false;
+    for (const d of daysList) {
+      const acts = (d.activities || []) as any[];
+      for (const a of acts) {
+        const hasCoords = typeof a.lat === 'number' && typeof a.lng === 'number';
+        if (hasCoords) continue;
+        const pid = (a as any).place_id as string | null | undefined;
+        if (!pid) continue;
+        try {
+          const res = await fetch(`/api/places/details?place_id=${encodeURIComponent(pid)}`);
+          const json = await res.json();
+          const lat = json?.lat ?? json?.result?.geometry?.location?.lat ?? null;
+          const lng = json?.lng ?? json?.result?.geometry?.location?.lng ?? null;
+          if (typeof lat === 'number' && typeof lng === 'number') {
+            // update DB
+            await supabase.from('activities').update({ lat, lng } as any).eq('id', a.id);
+            // persist local cache
+            saved[d.id] = saved[d.id] || {};
+            saved[d.id][a.id] = { lat, lng };
+            changed = true;
+            // update local state snapshot for immediate map use
+            setDays((prev) => prev.map((day) => day.id === d.id ? ({
+              ...day,
+              activities: (day.activities || []).map((act: any) => act.id === a.id ? { ...act, lat, lng } : act)
+            }) : day));
+          }
+        } catch {}
+      }
+    }
+    if (changed) {
+      try { localStorage.setItem(key, JSON.stringify(saved)); } catch {}
+    }
   };
   type FlightInfo = {
     flight?: string | null;
@@ -86,6 +129,7 @@ export function Itinerary({ tripId }: ItineraryProps) {
   const [flightByDay, setFlightByDay] = useState<Record<string, FlightState>>({});
   const [trip, setTrip] = useState<{ destination: string | null; lat: number | null; lng: number | null } | null>(null);
   const [isChatOpen, setIsChatOpen] = useState(false);
+  const [isExpensesOpen, setIsExpensesOpen] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [likesByActivity, setLikesByActivity] = useState<Record<string, { count: number; liked: boolean }>>({});
   const [commentsCountByActivity, setCommentsCountByActivity] = useState<Record<string, number>>({});
@@ -93,6 +137,35 @@ export function Itinerary({ tripId }: ItineraryProps) {
   const [commentsByActivity, setCommentsByActivity] = useState<Record<string, Array<{ id: string; user_id: string; content: string; created_at: string; user_name?: string; user_email?: string }>>>({});
   const [newCommentByActivity, setNewCommentByActivity] = useState<Record<string, string>>({});
   const [unreadCount, setUnreadCount] = useState(0);
+  // Expenses summary state
+  const [expenseTotalCents, setExpenseTotalCents] = useState<number>(0);
+  const [expenseUserBalanceCents, setExpenseUserBalanceCents] = useState<number>(0);
+
+  // Helpers
+  const formatInTZ = (iso?: string | null, tz?: string | null) => {
+    if (!iso) return null;
+    try {
+      const d = new Date(iso);
+      const base = new Intl.DateTimeFormat(undefined, {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+        timeZone: tz || 'UTC',
+      }).format(d);
+      let gmt = '';
+      try {
+        const parts = new Intl.DateTimeFormat(undefined, {
+          timeZone: tz || 'UTC',
+          timeZoneName: 'shortOffset',
+        }).formatToParts(d);
+        const tzPart = parts.find((p) => p.type === 'timeZoneName')?.value;
+        if (tzPart) gmt = tzPart.replace('UTC', 'GMT');
+      } catch {}
+      if (tz) return `${base} (${tz}${gmt ? `, ${gmt}` : ''})`;
+      return gmt ? `${base} (${gmt})` : base;
+    } catch {
+      return new Date(iso).toLocaleString();
+    }
+  };
 
   // Reactions and comments helpers
   const refreshReactions = async (activities: Activity[]) => {
@@ -195,6 +268,44 @@ export function Itinerary({ tripId }: ItineraryProps) {
     if (isChatOpen) setUnreadCount(0);
   }, [isChatOpen]);
 
+  useEffect(() => {
+    // Load expense summary once user is known
+    if (!currentUserId) return;
+    loadExpenseSummary();
+    const ch = supabase
+      .channel('trip-expenses-summary')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'trip_expenses', filter: `trip_id=eq.${tripId}` }, () => loadExpenseSummary())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'trip_expense_splits' }, () => loadExpenseSummary())
+      .subscribe();
+    return () => { void supabase.removeChannel(ch); };
+  }, [tripId, currentUserId]);
+
+  const loadExpenseSummary = async () => {
+    const { data: expenses } = await supabase
+      .from('trip_expenses')
+      .select('*')
+      .eq('trip_id', tripId);
+    const exp = (expenses || []) as any[];
+    const totalCents = exp.filter((e) => e.currency === 'USD').reduce((acc, e) => acc + (e.amount_cents || 0), 0);
+    setExpenseTotalCents(totalCents);
+    const ids = exp.map((e) => e.id);
+    let userBalance = 0;
+    if (currentUserId) {
+      const paid = exp.filter((e) => e.paid_by === currentUserId && e.currency === 'USD').reduce((acc, e) => acc + (e.amount_cents || 0), 0);
+      if (ids.length > 0) {
+        const { data: splits } = await supabase
+          .from('trip_expense_splits')
+          .select('user_id, share_cents, expense_id')
+          .in('expense_id', ids);
+        const owes = (splits || []).filter((s: any) => s.user_id === currentUserId).reduce((acc: number, s: any) => acc + (s.share_cents || 0), 0);
+        userBalance = paid - owes;
+      } else {
+        userBalance = paid;
+      }
+    }
+    setExpenseUserBalanceCents(userBalance);
+  };
+
   const loadDays = async () => {
     const { data: daysData } = await supabase
       .from('days')
@@ -211,9 +322,22 @@ export function Itinerary({ tripId }: ItineraryProps) {
             .eq('day_id', day.id)
             .order('starts_at');
 
+          // enrich activities with stored coords from localStorage (if present)
+          const baseActs: any[] = (activities || []) as any[];
+          let enriched: any[] = baseActs;
+          try {
+            const key = `wayfa:actcoords:${tripId}`;
+            const saved: Record<string, Record<string, { lat: number; lng: number }>> = JSON.parse(localStorage.getItem(key) || '{}');
+            const byDay = saved[day.id] || {};
+            enriched = baseActs.map((a: any) => {
+              const c = byDay[a.id];
+              return c ? { ...a, lat: c.lat, lng: c.lng } : a;
+            });
+          } catch {}
+
           return {
             ...day,
-            activities: activities || [],
+            activities: enriched,
           };
         })
       );
@@ -230,7 +354,7 @@ export function Itinerary({ tripId }: ItineraryProps) {
           // Skip if already set
           if (weatherByDay[d.id]?.weather) continue;
           const q = String(first.location);
-          // Save query and fetch weather + forecast
+          const hasCoords = typeof (first as any).lat === 'number' && typeof (first as any).lng === 'number';
           setWeatherByDay((prev) => ({
             ...prev,
             [d.id]: {
@@ -238,16 +362,32 @@ export function Itinerary({ tripId }: ItineraryProps) {
               query: q,
             },
           }));
-          try {
-            const res = await fetch(`/api/weather?q=${encodeURIComponent(q)}`);
-            const json = await res.json();
-            if (res.ok && !json.error) {
-              setWeatherByDay((prev) => ({ ...prev, [d.id]: { ...(prev[d.id] as any), weather: json } }));
-              persistWeather(d.id, q, null, null);
-            }
-          } catch {}
-          await fetchForecastForDay(d.id, null, null, q);
+          if (hasCoords) {
+            try {
+              const res = await fetch(`/api/weather?lat=${(first as any).lat}&lng=${(first as any).lng}`);
+              const json = await res.json();
+              if (res.ok && !json.error) {
+                setWeatherByDay((prev) => ({ ...prev, [d.id]: { ...(prev[d.id] as any), weather: json } }));
+                persistWeather(d.id, q, (first as any).lat, (first as any).lng);
+              }
+            } catch {}
+            await fetchForecastForDay(d.id, (first as any).lat, (first as any).lng, null);
+          } else {
+            try {
+              const res = await fetch(`/api/weather?q=${encodeURIComponent(q)}`);
+              const json = await res.json();
+              if (res.ok && !json.error) {
+                setWeatherByDay((prev) => ({ ...prev, [d.id]: { ...(prev[d.id] as any), weather: json } }));
+                persistWeather(d.id, q, null, null);
+              }
+            } catch {}
+            await fetchForecastForDay(d.id, null, null, q);
+          }
         }
+      } catch {}
+      // Backfill coords for activities missing lat/lng when place_id exists
+      try {
+        await backfillMissingCoords(daysWithActivities as any);
       } catch {}
       const allActs = daysWithActivities.flatMap((d: any) => d.activities || []);
       await refreshReactions(allActs as any);
@@ -462,16 +602,30 @@ export function Itinerary({ tripId }: ItineraryProps) {
     if (!newActivityTitle.trim()) return;
     const dayBefore = days.find((d: Day) => d.id === dayId);
     const wasFirst = dayBefore ? (dayBefore.activities?.length || 0) === 0 : false;
-    const { error } = await supabase.from('activities').insert({
+    const { data: inserted, error } = await supabase.from('activities').insert({
       day_id: dayId,
       title: newActivityTitle,
       location: newActivityLocation || null,
       starts_at: newActivityStartTime || null,
       ends_at: newActivityEndTime || null,
+      place_id: placeIdForActivity || null,
+      lat: placeCoordsForActivity.lat,
+      lng: placeCoordsForActivity.lng,
       type: newActivityType,
-    } as any);
+    } as any).select('*').single();
 
     if (!error) {
+      const newActId = (inserted as any)?.id as string | undefined;
+      // Persist per-activity coords for map rendering
+      if (newActId && placeCoordsForActivity.lat != null && placeCoordsForActivity.lng != null) {
+        try {
+          const key = `wayfa:actcoords:${tripId}`;
+          const saved = JSON.parse(localStorage.getItem(key) || '{}');
+          saved[dayId] = saved[dayId] || {};
+          saved[dayId][newActId] = { lat: placeCoordsForActivity.lat as number, lng: placeCoordsForActivity.lng as number };
+          localStorage.setItem(key, JSON.stringify(saved));
+        } catch {}
+      }
       setNewActivityDayId(null);
       setNewActivityTitle('');
       setNewActivityLocation('');
@@ -491,19 +645,26 @@ export function Itinerary({ tripId }: ItineraryProps) {
             query,
           },
         }));
-        try {
-          const res = await fetch(`/api/weather?q=${encodeURIComponent(query)}`);
-          const json = await res.json();
-          if (res.ok && !json.error) {
-            setWeatherByDay((prev) => ({ ...prev, [dayId]: { ...(prev[dayId] as any), weather: json } }));
-          }
-        } catch {}
-        // Persist and fetch forecast preferring coords when present
+        // Persist and fetch weather/forecast preferring coords when present
         if (coords.lat != null && coords.lng != null) {
           persistWeather(dayId, query, coords.lat, coords.lng);
+          try {
+            const res = await fetch(`/api/weather?lat=${coords.lat}&lng=${coords.lng}`);
+            const json = await res.json();
+            if (res.ok && !json.error) {
+              setWeatherByDay((prev) => ({ ...prev, [dayId]: { ...(prev[dayId] as any), weather: json } }));
+            }
+          } catch {}
           await fetchForecastForDay(dayId, coords.lat, coords.lng, null);
         } else if (query) {
           persistWeather(dayId, query, null, null);
+          try {
+            const res = await fetch(`/api/weather?q=${encodeURIComponent(query)}`);
+            const json = await res.json();
+            if (res.ok && !json.error) {
+              setWeatherByDay((prev) => ({ ...prev, [dayId]: { ...(prev[dayId] as any), weather: json } }));
+            }
+          } catch {}
           await fetchForecastForDay(dayId, null, null, query);
         }
       }
@@ -562,9 +723,11 @@ export function Itinerary({ tripId }: ItineraryProps) {
         </Card>
 
         <Card className="overflow-hidden">
-          <div className="h-48 bg-teal-700 flex items-center justify-center">
-            <div className="text-white text-sm">Map Preview</div>
-          </div>
+          {(() => {
+            const currentDay = days.find((d: Day) => d.id === selectedDayId) || days[0];
+            const acts = currentDay?.activities || [];
+            return <DayMap activities={acts as any} className="w-full" height={192} />;
+          })()}
         </Card>
 
         <Card className="p-4 space-y-3">
@@ -584,11 +747,13 @@ export function Itinerary({ tripId }: ItineraryProps) {
             <div className="text-gray-500">$</div>
           </div>
           <div className="text-sm text-gray-600">Total Trip Expenses</div>
-          <div className="text-3xl font-bold my-1">$1,200.00</div>
-          <div className="text-sm text-green-600">$400.00</div>
+          <div className="text-3xl font-bold my-1">${(expenseTotalCents/100).toFixed(2)}</div>
+          <div className={`text-sm ${expenseUserBalanceCents >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+            {(expenseUserBalanceCents >= 0 ? '' : '-')}${(Math.abs(expenseUserBalanceCents)/100).toFixed(2)}
+          </div>
           <div className="mt-4 grid grid-cols-2 gap-2">
-            <Button variant="outline" size="sm">View details</Button>
-            <Button size="sm">Add expense</Button>
+            <Button variant="outline" size="sm" onClick={() => setIsExpensesOpen(true)}>View details</Button>
+            <Button size="sm" onClick={() => setIsExpensesOpen(true)}>Add expense</Button>
           </div>
         </Card>
 
@@ -719,9 +884,15 @@ export function Itinerary({ tripId }: ItineraryProps) {
                         <div className="mt-3 grid grid-cols-2 gap-3 text-xs text-gray-700">
                           <div>
                             <div className="font-semibold text-gray-900">Departure</div>
-                            {F.flight.departure?.scheduled && <div>Scheduled: {new Date(F.flight.departure.scheduled).toLocaleString()}</div>}
-                            {F.flight.departure?.estimated && <div>Estimated: {new Date(F.flight.departure.estimated).toLocaleString()}</div>}
-                            {F.flight.departure?.actual && <div>Actual: {new Date(F.flight.departure.actual).toLocaleString()}</div>}
+                            {(() => {
+                              const leg = F.flight?.departure;
+                              const t = leg?.best || leg?.estimated || leg?.scheduled || leg?.actual;
+                              const str = formatInTZ(t, leg?.timezone);
+                              return <div>Time: {str || '—'}</div>;
+                            })()}
+                            {F.flight.departure?.scheduled && <div>Scheduled: {formatInTZ(F.flight.departure.scheduled, F.flight.departure.timezone)}</div>}
+                            {F.flight.departure?.estimated && <div>Estimated: {formatInTZ(F.flight.departure.estimated, F.flight.departure.timezone)}</div>}
+                            {F.flight.departure?.actual && <div>Actual: {formatInTZ(F.flight.departure.actual, F.flight.departure.timezone)}</div>}
                             {(F.flight.departure?.terminal || F.flight.departure?.gate) && (
                               <div>Terminal/Gate: {F.flight.departure.terminal || '-'} / {F.flight.departure.gate || '-'}</div>
                             )}
@@ -729,9 +900,15 @@ export function Itinerary({ tripId }: ItineraryProps) {
                           </div>
                           <div>
                             <div className="font-semibold text-gray-900">Arrival</div>
-                            {F.flight.arrival?.scheduled && <div>Scheduled: {new Date(F.flight.arrival.scheduled).toLocaleString()}</div>}
-                            {F.flight.arrival?.estimated && <div>Estimated: {new Date(F.flight.arrival.estimated).toLocaleString()}</div>}
-                            {F.flight.arrival?.actual && <div>Actual: {new Date(F.flight.arrival.actual).toLocaleString()}</div>}
+                            {(() => {
+                              const leg = F.flight?.arrival;
+                              const t = leg?.best || leg?.estimated || leg?.scheduled || leg?.actual;
+                              const str = formatInTZ(t, leg?.timezone);
+                              return <div>Time: {str || '—'}</div>;
+                            })()}
+                            {F.flight.arrival?.scheduled && <div>Scheduled: {formatInTZ(F.flight.arrival.scheduled, F.flight.arrival.timezone)}</div>}
+                            {F.flight.arrival?.estimated && <div>Estimated: {formatInTZ(F.flight.arrival.estimated, F.flight.arrival.timezone)}</div>}
+                            {F.flight.arrival?.actual && <div>Actual: {formatInTZ(F.flight.arrival.actual, F.flight.arrival.timezone)}</div>}
                             {(F.flight.arrival?.terminal || F.flight.arrival?.gate) && (
                               <div>Terminal/Gate: {F.flight.arrival.terminal || '-'} / {F.flight.arrival.gate || '-'}</div>
                             )}
@@ -980,6 +1157,13 @@ export function Itinerary({ tripId }: ItineraryProps) {
           </div>
         </div>
       )}
+
+      {/* Expenses modal (restores previous behavior) */}
+      <Dialog open={isExpensesOpen} onOpenChange={setIsExpensesOpen}>
+        <DialogContent className="max-w-2xl p-0">
+          <Expenses tripId={tripId} />
+        </DialogContent>
+      </Dialog>
 
     </div>
   );
