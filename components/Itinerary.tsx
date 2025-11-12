@@ -77,26 +77,51 @@ export function Itinerary({ tripId }: ItineraryProps) {
         const hasCoords = typeof a.lat === 'number' && typeof a.lng === 'number';
         if (hasCoords) continue;
         const pid = (a as any).place_id as string | null | undefined;
-        if (!pid) continue;
-        try {
-          const res = await fetch(`/api/places/details?place_id=${encodeURIComponent(pid)}`);
-          const json = await res.json();
-          const lat = json?.lat ?? json?.result?.geometry?.location?.lat ?? null;
-          const lng = json?.lng ?? json?.result?.geometry?.location?.lng ?? null;
-          if (typeof lat === 'number' && typeof lng === 'number') {
-            // update DB
-            await supabase.from('activities').update({ lat, lng } as any).eq('id', a.id);
-            // persist local cache
-            saved[d.id] = saved[d.id] || {};
-            saved[d.id][a.id] = { lat, lng };
-            changed = true;
-            // update local state snapshot for immediate map use
-            setDays((prev) => prev.map((day) => day.id === d.id ? ({
-              ...day,
-              activities: (day.activities || []).map((act: any) => act.id === a.id ? { ...act, lat, lng } : act)
-            }) : day));
-          }
-        } catch {}
+        if (pid) {
+          try {
+            const res = await fetch(`/api/places/details?place_id=${encodeURIComponent(pid)}`);
+            const json = await res.json();
+            const lat = json?.lat ?? json?.result?.geometry?.location?.lat ?? null;
+            const lng = json?.lng ?? json?.result?.geometry?.location?.lng ?? null;
+            if (typeof lat === 'number' && typeof lng === 'number') {
+              await supabase.from('activities').update({ lat, lng } as any).eq('id', a.id);
+              saved[d.id] = saved[d.id] || {};
+              saved[d.id][a.id] = { lat, lng };
+              changed = true;
+              setDays((prev) => prev.map((day) => day.id === d.id ? ({
+                ...day,
+                activities: (day.activities || []).map((act: any) => act.id === a.id ? { ...act, lat, lng } : act)
+              }) : day));
+              continue;
+            }
+          } catch {}
+        }
+        // Fallback: try resolving by location text
+        const locName = (a as any).location as string | null | undefined;
+        if (locName) {
+          try {
+            const ac = await fetch(`/api/places/autocomplete?q=${encodeURIComponent(locName)}&limit=1`);
+            const sug = await ac.json();
+            const first = Array.isArray(sug?.predictions) ? sug.predictions[0] : (Array.isArray(sug) ? sug[0] : null);
+            const pid2 = first?.place_id || first?.placeId;
+            if (pid2) {
+              const det = await fetch(`/api/places/details?place_id=${encodeURIComponent(pid2)}`);
+              const js = await det.json();
+              const lat = js?.lat ?? js?.result?.geometry?.location?.lat ?? null;
+              const lng = js?.lng ?? js?.result?.geometry?.location?.lng ?? null;
+              if (typeof lat === 'number' && typeof lng === 'number') {
+                await supabase.from('activities').update({ lat, lng, place_id: pid2 } as any).eq('id', a.id);
+                saved[d.id] = saved[d.id] || {};
+                saved[d.id][a.id] = { lat, lng };
+                changed = true;
+                setDays((prev) => prev.map((day) => day.id === d.id ? ({
+                  ...day,
+                  activities: (day.activities || []).map((act: any) => act.id === a.id ? { ...act, lat, lng, place_id: pid2 } : act)
+                }) : day));
+              }
+            }
+          } catch {}
+        }
       }
     }
     if (changed) {
@@ -725,8 +750,28 @@ export function Itinerary({ tripId }: ItineraryProps) {
         <Card className="overflow-hidden">
           {(() => {
             const currentDay = days.find((d: Day) => d.id === selectedDayId) || days[0];
-            const acts = currentDay?.activities || [];
-            return <DayMap activities={acts as any} className="w-full" height={192} />;
+            const acts = (currentDay?.activities || []) as any[];
+            let centerHint: { lat: number; lng: number } | null = null;
+            // Prefer first activity coords
+            const firstWithCoords = acts.find((a) => typeof a?.lat === 'number' && typeof a?.lng === 'number');
+            if (firstWithCoords) {
+              centerHint = { lat: firstWithCoords.lat, lng: firstWithCoords.lng };
+            } else {
+              // Fallback to persisted weather coords for the day
+              try {
+                const key = `wayfa:weather:${tripId}`;
+                const saved: Record<string, { q: string; lat: number | null; lng: number | null }> = JSON.parse(localStorage.getItem(key) || '{}');
+                const entry = saved[currentDay?.id || ''];
+                if (entry && typeof entry.lat === 'number' && typeof entry.lng === 'number') {
+                  centerHint = { lat: entry.lat, lng: entry.lng };
+                }
+              } catch {}
+              // Fallback to trip coords
+              if (!centerHint && trip && typeof trip.lat === 'number' && typeof trip.lng === 'number') {
+                centerHint = { lat: trip.lat!, lng: trip.lng! };
+              }
+            }
+            return <DayMap activities={acts as any} className="w-full" height={192} centerHint={centerHint} />;
           })()}
         </Card>
 
