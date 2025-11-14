@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { signUp } from '@/lib/auth';
@@ -16,6 +16,22 @@ export default function RegisterPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  const rules = useMemo(() => {
+    const lengthOk = password.length >= 8;
+    const hasLower = /[a-z]/.test(password);
+    const hasUpper = /[A-Z]/.test(password);
+    const hasNumber = /[0-9]/.test(password);
+    return { lengthOk, hasLower, hasUpper, hasNumber };
+  }, [password]);
+
+  const score = (Number(rules.lengthOk) + Number(rules.hasLower) + Number(rules.hasUpper) + Number(rules.hasNumber));
+  const strength = useMemo(() => {
+    if (score <= 1) return { label: 'Weak', color: 'bg-red-500' };
+    if (score === 2) return { label: 'Fair', color: 'bg-orange-500' };
+    if (score === 3) return { label: 'Medium', color: 'bg-amber-500' };
+    return { label: 'Strong', color: 'bg-emerald-600' };
+  }, [score]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -25,8 +41,8 @@ export default function RegisterPage() {
       return;
     }
 
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters');
+    if (!(rules.lengthOk && rules.hasLower && rules.hasUpper && rules.hasNumber)) {
+      setError('Password must be at least 8 characters and include uppercase, lowercase and a number');
       return;
     }
 
@@ -90,6 +106,21 @@ export default function RegisterPage() {
               disabled={loading}
               placeholder="••••••••"
             />
+            <div className="mt-2">
+              <div className="h-1.5 w-full bg-gray-200 rounded-full overflow-hidden">
+                <div
+                  className={`h-full ${strength.color} transition-all`}
+                  style={{ width: `${(score / 4) * 100}%` }}
+                />
+              </div>
+              <div className="mt-1 text-xs text-gray-600">{strength.label}</div>
+            </div>
+            <ul className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+              <li className={rules.lengthOk ? 'text-emerald-700' : 'text-gray-500'}>• At least 8 characters</li>
+              <li className={rules.hasUpper ? 'text-emerald-700' : 'text-gray-500'}>• Uppercase letter (A-Z)</li>
+              <li className={rules.hasLower ? 'text-emerald-700' : 'text-gray-500'}>• Lowercase letter (a-z)</li>
+              <li className={rules.hasNumber ? 'text-emerald-700' : 'text-gray-500'}>• Number (0-9)</li>
+            </ul>
           </div>
 
           <div className="space-y-2">
@@ -107,7 +138,7 @@ export default function RegisterPage() {
             />
           </div>
 
-          <Button type="submit" className="w-full" disabled={loading}>
+          <Button type="submit" className="w-full" disabled={loading || !(rules.lengthOk && rules.hasLower && rules.hasUpper && rules.hasNumber) || password !== confirmPassword}>
             {loading ? 'Creating account...' : 'Sign up'}
           </Button>
         </form>

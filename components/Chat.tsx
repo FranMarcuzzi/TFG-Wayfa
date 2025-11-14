@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Send } from 'lucide-react';
 import { format } from 'date-fns';
+import { toast } from '@/hooks/use-toast';
 
 interface Message {
   id: string;
@@ -214,7 +215,7 @@ export function Chat({ tripId, embedded = false, compact = false }: ChatProps) {
 
     if (error) {
       console.error('Failed to send message:', error);
-      alert(error.message || 'Failed to send message');
+      toast({ variant: 'destructive', title: 'Message not sent', description: error.message || 'Failed to send message' });
       return;
     }
 

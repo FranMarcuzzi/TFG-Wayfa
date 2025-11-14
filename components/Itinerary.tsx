@@ -5,12 +5,19 @@ import { supabase } from '@/lib/supabase/client';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Plus, Clock, MapPin, X, Sun, Plane, ThumbsUp, MessageCircle, Utensils, Landmark, Camera, Bus } from 'lucide-react';
+import { Plus, Clock, MapPin, X, Sun, Plane, ThumbsUp, MessageCircle, Utensils, Landmark, Camera, Bus, Trash2, Calendar, BarChart3 } from 'lucide-react';
+import { Polls } from '@/components/Polls';
 import { TripMembers } from '@/components/TripMembers';
 import { DayMap } from '@/components/DayMap';
 import { Expenses } from '@/components/Expenses';
 import { Chat } from '@/components/Chat';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { useI18n } from '@/components/i18n/I18nProvider';
+import { Reveal } from '@/components/motion/Reveal';
+import Player from 'lottie-react';
+import loadingAnim from '@/public/animations/loading.json';
+import { toast } from '@/hooks/use-toast';
+import { ToastAction } from '@/components/ui/toast';
 
 interface Activity {
   id: string;
@@ -34,6 +41,7 @@ interface ItineraryProps {
 }
 
 export function Itinerary({ tripId }: ItineraryProps) {
+  const { t, locale } = useI18n();
   const [days, setDays] = useState<Day[]>([]);
   const [loading, setLoading] = useState(true);
   const [newActivityDayId, setNewActivityDayId] = useState<string | null>(null);
@@ -62,6 +70,45 @@ export function Itinerary({ tripId }: ItineraryProps) {
     terminal?: string | null;
     timezone?: string | null;
     delay?: number | null;
+  };
+
+  const fmtHM = (s?: string | null) => {
+    if (!s) return '';
+    const m = String(s);
+    return m.length >= 5 ? m.slice(0, 5) : m;
+  };
+
+  // Countdown state for trip start
+  const [nowTs, setNowTs] = useState<number>(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNowTs(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  // trip-dependent helpers are declared later, after `trip` state
+
+  const askAI = async () => {
+    const q = aiQuery.trim();
+    if (!q || aiLoading) return;
+    setAiLoading(true);
+    setAiError('');
+    // push user message and clear input
+    setAiMessages((prev) => [...prev, { role: 'user', content: q }]);
+    setAiQuery('');
+    try {
+      const res = await fetch('/api/ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ q, locale }),
+      });
+      const json = await res.json();
+      if (!res.ok || json.error) throw new Error(json.error || 'AI error');
+      setAiMessages((prev) => [...prev, { role: 'assistant', content: String(json.answer || '') }]);
+    } catch (e: any) {
+      setAiError(e?.message || 'AI error');
+    } finally {
+      setAiLoading(false);
+    }
   };
 
   // Resolve and persist missing coordinates for activities that have a place_id
@@ -152,8 +199,41 @@ export function Itinerary({ tripId }: ItineraryProps) {
   }>>({});
   // Per-day Flight widget state
   const [flightByDay, setFlightByDay] = useState<Record<string, FlightState>>({});
-  const [trip, setTrip] = useState<{ destination: string | null; lat: number | null; lng: number | null } | null>(null);
+  const [trip, setTrip] = useState<{ destination: string | null; lat: number | null; lng: number | null; start_date: string | null; end_date: string | null } | null>(null);
+  // Helpers that depend on `trip`
+  const startDate = trip?.start_date ? new Date(trip.start_date) : null;
+  const endDate = trip?.end_date ? new Date(trip.end_date) : null;
+  const diffToStartMs = startDate ? startDate.getTime() - nowTs : null;
+  const diffToEndMs = endDate ? endDate.getTime() - nowTs : null;
+  const relFmt = (value: number, unit: Intl.RelativeTimeFormatUnit) => {
+    try {
+      return new Intl.RelativeTimeFormat(locale as any, { numeric: 'auto' }).format(value, unit);
+    } catch {
+      return `${value} ${unit}`;
+    }
+  };
+  const partsFromMs = (ms: number) => {
+    const total = Math.max(0, Math.floor(ms / 1000));
+    const days = Math.floor(total / 86400);
+    const hours = Math.floor((total % 86400) / 3600);
+    const minutes = Math.floor((total % 3600) / 60);
+    return { days, hours, minutes };
+  };
+  const tripStatus = (): 'planning' | 'active' | 'past' | null => {
+    if (!trip) return null;
+    const now = new Date();
+    const start = trip.start_date ? new Date(trip.start_date) : null;
+    const end = trip.end_date ? new Date(trip.end_date) : null;
+    if (!start || !end) return 'planning';
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const s = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+    const e = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+    if (today < s) return 'planning';
+    if (today > e) return 'past';
+    return 'active';
+  };
   const [isChatOpen, setIsChatOpen] = useState(false);
+  const [isPollsOpen, setIsPollsOpen] = useState(false);
   const [isExpensesOpen, setIsExpensesOpen] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [likesByActivity, setLikesByActivity] = useState<Record<string, { count: number; liked: boolean }>>({});
@@ -161,7 +241,13 @@ export function Itinerary({ tripId }: ItineraryProps) {
   const [openCommentsFor, setOpenCommentsFor] = useState<Record<string, boolean>>({});
   const [commentsByActivity, setCommentsByActivity] = useState<Record<string, Array<{ id: string; user_id: string; content: string; created_at: string; user_name?: string; user_email?: string }>>>({});
   const [newCommentByActivity, setNewCommentByActivity] = useState<Record<string, string>>({});
+  const [mediaUploadingByActivity, setMediaUploadingByActivity] = useState<Record<string, boolean>>({});
   const [unreadCount, setUnreadCount] = useState(0);
+  // Ask Wayfa AI state (simple chat)
+  const [aiQuery, setAiQuery] = useState('');
+  const [aiMessages, setAiMessages] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([]);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState('');
   // Expenses summary state
   const [expenseTotalCents, setExpenseTotalCents] = useState<number>(0);
   const [expenseUserBalanceCents, setExpenseUserBalanceCents] = useState<number>(0);
@@ -427,12 +513,18 @@ export function Itinerary({ tripId }: ItineraryProps) {
   const loadTrip = async () => {
     const { data } = await supabase
       .from('trips')
-      .select('destination, lat, lng')
+      .select('destination, lat, lng, start_date, end_date')
       .eq('id', tripId)
       .maybeSingle();
 
     if (data) {
-      setTrip({ destination: (data as any).destination ?? null, lat: (data as any).lat ?? null, lng: (data as any).lng ?? null });
+      setTrip({
+        destination: (data as any).destination ?? null,
+        lat: (data as any).lat ?? null,
+        lng: (data as any).lng ?? null,
+        start_date: (data as any).start_date ?? null,
+        end_date: (data as any).end_date ?? null,
+      });
       // No prefill per-day here; user sets city per day.
     }
   };
@@ -705,49 +797,156 @@ export function Itinerary({ tripId }: ItineraryProps) {
     await loadDays();
   };
 
+  const deleteDay = async (dayId: string) => {
+    try {
+      await supabase.from('activities').delete().eq('day_id', dayId);
+      await supabase.from('days').delete().eq('id', dayId);
+      await loadDays();
+      if (selectedDayId === dayId) {
+        const next = days.find((d) => d.id !== dayId)?.id || null;
+        setSelectedDayId(next);
+      }
+    } catch {}
+  };
+
+  const confirmDeleteDay = (day: Day) => {
+    const desc = day.date ? new Date(day.date).toLocaleDateString() : t('itinerary.plan');
+    toast({
+      title: t('itinerary.deleteDayTitle'),
+      description: `${t('itinerary.dayLabel', { n: String(day.day_index) })} • ${desc}`,
+      action: (
+        <ToastAction altText={t('itinerary.delete')} onClick={() => deleteDay(day.id)}>
+          {t('itinerary.delete')}
+        </ToastAction>
+      ),
+    });
+  };
+
+  const uploadMedia = async (activityId: string, file: File) => {
+    try {
+      setMediaUploadingByActivity((p) => ({ ...p, [activityId]: true }));
+      const bucket = 'activity-media';
+      const path = `${tripId}/${activityId}/${Date.now()}-${file.name}`;
+      const { error: upErr } = await supabase.storage.from(bucket).upload(path, file, { upsert: false });
+      if (upErr) throw upErr;
+      const { data } = supabase.storage.from(bucket).getPublicUrl(path);
+      const url = data.publicUrl;
+      await supabase.from('activity_comments').insert({ activity_id: activityId, user_id: currentUserId, content: url } as any);
+      await loadCommentsFor(activityId);
+    } catch (e) {
+      // Error handled silently
+    } finally {
+      setMediaUploadingByActivity((p) => ({ ...p, [activityId]: false }));
+    }
+  };
+
   if (loading) {
-    return <div className="text-gray-600">Loading itinerary...</div>;
+    return (
+      <div className="relative">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-white/80 backdrop-blur-sm">
+          <Player autoplay loop animationData={loadingAnim as any} style={{ width: 280, height: 280 }} />
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-6">
+          <div className="space-y-4 p-4">
+            <div className="h-6 w-32 bg-gray-200 rounded animate-pulse" />
+            <div className="h-10 w-full bg-gray-100 rounded animate-pulse" />
+            <div className="h-10 w-full bg-gray-100 rounded animate-pulse" />
+          </div>
+          <div className="space-y-4 p-4">
+            <div className="h-40 w-full bg-gray-100 rounded animate-pulse" />
+            <div className="h-40 w-full bg-gray-100 rounded animate-pulse" />
+            <div className="h-24 w-full bg-gray-100 rounded animate-pulse" />
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
+    <>
     <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-6">
       <div className="space-y-6">
+        {/* Trip start countdown */}
+        <Card className="p-4">
+          <div className="flex items-center justify-between mb-2">
+            <div className="text-sm font-medium text-gray-800">Trip countdown</div>
+            <Calendar className="h-4 w-4 text-gray-600" />
+          </div>
+          {startDate ? (
+            (() => {
+              const hasStarted = diffToStartMs! <= 0;
+              const isActive = hasStarted && (!!endDate ? nowTs <= endDate.getTime() : true);
+              const isPast = !!endDate && nowTs > endDate.getTime();
+              const showMs = hasStarted ? (diffToEndMs ?? 0) : (diffToStartMs ?? 0);
+              const { days, hours, minutes } = partsFromMs(showMs);
+              return (
+                <>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="rounded-lg bg-white/80 backdrop-blur px-3 py-2 text-center border border-white/60 shadow-sm">
+                      <div className="text-2xl font-bold text-gray-900">{days}</div>
+                      <div className="text-[11px] uppercase tracking-wide text-gray-600">Days</div>
+                    </div>
+                    <div className="rounded-lg bg-white/80 backdrop-blur px-3 py-2 text-center border border-white/60 shadow-sm">
+                      <div className="text-2xl font-bold text-gray-900">{hours}</div>
+                      <div className="text-[11px] uppercase tracking-wide text-gray-600">Hours</div>
+                    </div>
+                    <div className="rounded-lg bg-white/80 backdrop-blur px-3 py-2 text-center border border-white/60 shadow-sm">
+                      <div className="text-2xl font-bold text-gray-900">{minutes}</div>
+                      <div className="text-[11px] uppercase tracking-wide text-gray-600">Minutes</div>
+                    </div>
+                  </div>
+                  {/* Intentionally no relative/start text per UX request */}
+                </>
+              );
+            })()
+          ) : (
+            <div className="text-xs text-gray-600">Set a start date to see the countdown</div>
+          )}
+        </Card>
         <Card className="p-4">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold text-gray-900">Itinerary</h3>
+            <div className="flex items-center gap-2">
+              <h3 className="font-semibold text-gray-900">{t('itinerary.title')}</h3>
+            </div>
             <Button onClick={addDay} size="sm" variant="outline" className="gap-2">
               <Plus className="h-4 w-4" />
-              Add Day
+              {t('itinerary.addDay')}
             </Button>
           </div>
           {days.length === 0 ? (
-            <div className="text-sm text-gray-600">No days yet.</div>
+            <div className="text-sm text-gray-600">{t('itinerary.noDays')}</div>
           ) : (
             <div className="space-y-2">
-              {days.map((day: Day) => (
-                <button
-                  key={day.id}
-                  onClick={() => setSelectedDayId(day.id)}
-                  className={`w-full text-left px-3 py-2 rounded-md border transition ${
-                    selectedDayId === day.id ? 'bg-gray-900 text-white border-gray-900' : 'bg-white hover:bg-gray-50 border-gray-200'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="font-medium">Day {day.day_index}</div>
-                    {selectedDayId === day.id && <div className="text-xs opacity-80">Selected</div>}
-                  </div>
-                  {day.date && (
-                    <div className={`text-xs mt-1 ${selectedDayId === day.id ? 'text-gray-200' : 'text-gray-500'}`}>
-                      {new Date(day.date).toLocaleDateString()}
+              {days.map((day: Day, idx: number) => (
+                <Reveal key={day.id} variant="slideUp" delayMs={idx * 70}>
+                  <button
+                    onClick={() => setSelectedDayId(day.id)}
+                    className={`w-full text-left px-3 py-2 rounded-md border transition ${
+                      selectedDayId === day.id ? 'bg-gray-900 text-white border-gray-900' : 'bg-white hover:bg-gray-50 border-gray-200'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="font-medium">{t('itinerary.dayLabel', { n: String(day.day_index) })}</div>
+                      {(() => {
+                        const dstr = day.date
+                          ? new Date(day.date).toLocaleDateString()
+                          : (trip?.start_date
+                              ? (() => { const base = new Date(trip!.start_date!); base.setDate(base.getDate() + (day.day_index - 1)); return base.toLocaleDateString(); })()
+                              : null);
+                        return dstr ? (
+                          <div className={`text-xs ${selectedDayId === day.id ? 'text-gray-200' : 'text-gray-500'}`}>{dstr}</div>
+                        ) : null;
+                      })()}
                     </div>
-                  )}
-                </button>
+                  </button>
+                </Reveal>
               ))}
             </div>
           )}
         </Card>
 
-        <Card className="overflow-hidden">
+        <Reveal>
+          <Card className="overflow-hidden">
           {(() => {
             const currentDay = days.find((d: Day) => d.id === selectedDayId) || days[0];
             const acts = (currentDay?.activities || []) as any[];
@@ -773,34 +972,55 @@ export function Itinerary({ tripId }: ItineraryProps) {
             }
             return <DayMap activities={acts as any} className="w-full" height={192} centerHint={centerHint} />;
           })()}
-        </Card>
+          </Card>
+        </Reveal>
 
-        <Card className="p-4 space-y-3">
-          <div className="font-semibold text-gray-900">Ask Wayfa AI</div>
-          <div className="text-sm text-gray-700 p-3 rounded-md bg-gray-50">
-            What's the best way to get to Trastevere from the Colosseum?
+        <Reveal>
+          <Card className="p-4 space-y-3">
+          <div className="font-semibold text-gray-900">{t('ai.title')}</div>
+          {aiMessages.length === 0 ? (
+            <div className="text-sm text-gray-500 p-3 rounded-md bg-gray-50">{t('ai.sample')}</div>
+          ) : (
+            <div className="space-y-2 max-h-60 overflow-auto pr-1">
+              {aiMessages.map((m, idx) => (
+                <div key={idx} className={`text-sm whitespace-pre-wrap p-3 rounded-md ${m.role === 'assistant' ? 'bg-gray-50 text-gray-700' : 'bg-white border text-gray-800'}`}>
+                  {m.content}
+                </div>
+              ))}
+            </div>
+          )}
+          {aiError && <div className="text-xs text-red-600">{aiError}</div>}
+          <div className="flex gap-2">
+            <Input
+              placeholder={t('ai.placeholder')}
+              value={aiQuery}
+              onChange={(e) => setAiQuery(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') askAI(); }}
+            />
+            <Button size="sm" onClick={askAI} disabled={aiLoading || !aiQuery.trim()}>
+              {aiLoading ? t('common.loading') : t('ai.ask')}
+            </Button>
           </div>
-          <div className="text-sm text-gray-500 p-3 rounded-md bg-gray-50">
-            The best way is by bus (line 75) or a scenic 30-minute walk.
-          </div>
-          <Input placeholder="Ask something..." />
-        </Card>
+          </Card>
+        </Reveal>
 
-        <Card className="p-4">
+        <Reveal>
+          <Card className="p-4">
           <div className="flex items-center justify-between mb-2">
-            <div className="font-semibold text-gray-900">Expense Summary</div>
+            <div className="font-semibold text-gray-900">{t('expenses.summary')}</div>
             <div className="text-gray-500">$</div>
           </div>
-          <div className="text-sm text-gray-600">Total Trip Expenses</div>
-          <div className="text-3xl font-bold my-1">${(expenseTotalCents/100).toFixed(2)}</div>
-          <div className={`text-sm ${expenseUserBalanceCents >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+          <div className="text-sm text-gray-600">{t('expenses.total')}</div>
+          <div className="text-3xl font-bold text-gray-900">${(expenseTotalCents/100).toFixed(2)}</div>
+          <div className="text-sm text-green-600">
             {(expenseUserBalanceCents >= 0 ? '' : '-')}${(Math.abs(expenseUserBalanceCents)/100).toFixed(2)}
           </div>
           <div className="mt-4 grid grid-cols-2 gap-2">
-            <Button variant="outline" size="sm" onClick={() => setIsExpensesOpen(true)}>View details</Button>
-            <Button size="sm" onClick={() => setIsExpensesOpen(true)}>Add expense</Button>
+            <Button variant="outline" size="sm" onClick={() => setIsExpensesOpen(true)}>{t('expenses.viewDetails')}</Button>
+            <Button size="sm" onClick={() => setIsExpensesOpen(true)}>{t('expenses.openForm')}</Button>
           </div>
-        </Card>
+          </Card>
+        </Reveal>
 
         <TripMembers tripId={tripId} />
       </div>
@@ -810,22 +1030,29 @@ export function Itinerary({ tripId }: ItineraryProps) {
           const currentDay = days.find((d: Day) => d.id === selectedDayId) || days[0];
           if (!currentDay) return (
             <Card className="p-8 text-center">
-              <p className="text-gray-600">No days yet. Add a day to start planning!</p>
+              <p className="text-gray-600">{t('itinerary.noDaysCta')}</p>
             </Card>
           );
 
           return (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <h2 className="text-2xl font-semibold text-gray-900">Day {currentDay.day_index}: {currentDay.date ? new Date(currentDay.date).toLocaleDateString() : 'Plan'}</h2>
-                <Button className="gap-2" onClick={() => setNewActivityDayId(currentDay.id)}>
-                  <Plus className="h-4 w-4" />
-                  Add Activity
-                </Button>
+                <h2 className="text-2xl font-semibold text-gray-900">{t('itinerary.dayHeading', { n: String(currentDay.day_index), date: currentDay.date ? new Date(currentDay.date).toLocaleDateString() : t('itinerary.plan') })}</h2>
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" className="gap-2" onClick={() => setNewActivityDayId(currentDay.id)}>
+                    <Plus className="h-4 w-4" />
+                    {t('itinerary.addActivity')}
+                  </Button>
+                  <Button variant="ghost" size="icon" onClick={() => confirmDeleteDay(currentDay)} aria-label="Delete day">
+                    <Trash2 className="h-4 w-4 text-red-600" />
+                  </Button>
+                </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Card className="p-5">
+                <Reveal>
+                  <Reveal>
+                  <Card className="p-5">
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
                       {(() => {
@@ -846,8 +1073,8 @@ export function Itinerary({ tripId }: ItineraryProps) {
                       </div>
                       <div className="text-sm text-gray-600">
                         {W?.weather
-                          ? `${W.weather.name}${W.weather.country ? ', ' + W.weather.country : ''} • ${W.weather.description ?? 'Weather'}`
-                          : 'Enter a city to fetch the weather'}
+                          ? `${W.weather.name}${W.weather.country ? ', ' + W.weather.country : ''} • ${W.weather.description ?? t('itinerary.weather')}`
+                          : t('itinerary.enterCity')}
                       </div>
                       {W?.error && (
                         <div className="text-xs text-red-600 mt-1">{W.error}</div>
@@ -857,7 +1084,7 @@ export function Itinerary({ tripId }: ItineraryProps) {
                       )}
                       <div className="flex items-center gap-2 mt-3">
                         <Input
-                          placeholder="City (e.g., Rome,IT)"
+                          placeholder={t('itinerary.cityPlaceholder')}
                           value={W?.query || ''}
                           onChange={(e) => setWeatherByDay((prev) => ({ ...prev, [currentDay.id]: { ...(prev[currentDay.id] as any), query: e.target.value } }))}
                         />
@@ -866,12 +1093,12 @@ export function Itinerary({ tripId }: ItineraryProps) {
                           disabled={W?.loading || !(W?.query)}
                           onClick={() => getWeatherForDay(currentDay.id)}
                         >
-                          {W?.loading ? 'Loading...' : 'Get'}
+                          {W?.loading ? t('common.loading') : t('common.get')}
                         </Button>
                       </div>
                       <div className="mt-4">
                         {W?.forecastLoading ? (
-                          <div className="text-xs text-gray-500">Loading forecast...</div>
+                          <div className="text-xs text-gray-500">{t('itinerary.loadingForecast')}</div>
                         ) : W?.forecast && W.forecast.length > 0 ? (
                           <div className="grid grid-cols-7 gap-2">
                             {W.forecast.map((d) => (
@@ -880,7 +1107,7 @@ export function Itinerary({ tripId }: ItineraryProps) {
                                 <div className="text-gray-500">{new Date(d.dt * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</div>
                                 <div className="my-1">
                                   {d.icon ? (
-                                    <img alt={d.description || 'weather'} className="mx-auto h-6 w-6" src={`https://openweathermap.org/img/wn/${d.icon}@2x.png`} />
+                                    <img alt={d.description || t('itinerary.weather')} className="mx-auto h-6 w-6" src={`https://openweathermap.org/img/wn/${d.icon}@2x.png`} />
                                   ) : (
                                     <Sun className="h-5 w-5 text-yellow-500 mx-auto" />
                                   )}
@@ -893,16 +1120,18 @@ export function Itinerary({ tripId }: ItineraryProps) {
                             ))}
                           </div>
                         ) : (
-                          <div className="text-xs text-gray-500">No forecast available</div>
+                          <div className="text-xs text-gray-500">{t('itinerary.noForecast')}</div>
                         )}
                       </div>
                           </>
                         );
                       })()}
                     </div>
-                    <div className="text-sm text-gray-500">Weather</div>
+                    <div className="text-sm text-gray-500">{t('itinerary.weather')}</div>
                   </div>
-                </Card>
+                    </Card>
+                </Reveal>
+                </Reveal>
 
                 <Card className="p-5">
                   <div className="flex items-start justify-between">
@@ -911,8 +1140,8 @@ export function Itinerary({ tripId }: ItineraryProps) {
                         const F = flightByDay[currentDay.id] || { query: '', loading: false, error: '', flight: null };
                         return (
                           <>
-                      <div className="text-sm text-gray-500">Flight Status</div>
-                      <div className="font-semibold text-gray-900">{F?.flight?.flight || 'Enter flight code'}</div>
+                      <div className="text-sm text-gray-500">{t('itinerary.flightStatus')}</div>
+                      <div className="font-semibold text-gray-900">{F?.flight?.flight || t('itinerary.enterFlight')}</div>
                       {F?.flight?.departure?.airport && F?.flight?.arrival?.airport && (
                         <div className="text-sm text-gray-600">
                           {F.flight!.departure!.airport} → {F.flight!.arrival!.airport}
@@ -928,36 +1157,36 @@ export function Itinerary({ tripId }: ItineraryProps) {
                       {F?.flight && (
                         <div className="mt-3 grid grid-cols-2 gap-3 text-xs text-gray-700">
                           <div>
-                            <div className="font-semibold text-gray-900">Departure</div>
+                            <div className="font-semibold text-gray-900">{t('itinerary.departure')}</div>
                             {(() => {
                               const leg = F.flight?.departure;
-                              const t = leg?.best || leg?.estimated || leg?.scheduled || leg?.actual;
-                              const str = formatInTZ(t, leg?.timezone);
-                              return <div>Time: {str || '—'}</div>;
+                              const timePick = leg?.best || leg?.estimated || leg?.scheduled || leg?.actual;
+                              const str = formatInTZ(timePick, leg?.timezone);
+                              return <div>{t('itinerary.time')}: {str || '—'}</div>;
                             })()}
-                            {F.flight.departure?.scheduled && <div>Scheduled: {formatInTZ(F.flight.departure.scheduled, F.flight.departure.timezone)}</div>}
-                            {F.flight.departure?.estimated && <div>Estimated: {formatInTZ(F.flight.departure.estimated, F.flight.departure.timezone)}</div>}
-                            {F.flight.departure?.actual && <div>Actual: {formatInTZ(F.flight.departure.actual, F.flight.departure.timezone)}</div>}
+                            {F.flight.departure?.scheduled && <div>{t('itinerary.scheduled')}: {formatInTZ(F.flight.departure.scheduled, F.flight.departure.timezone)}</div>}
+                            {F.flight.departure?.estimated && <div>{t('itinerary.estimated')}: {formatInTZ(F.flight.departure.estimated, F.flight.departure.timezone)}</div>}
+                            {F.flight.departure?.actual && <div>{t('itinerary.actual')}: {formatInTZ(F.flight.departure.actual, F.flight.departure.timezone)}</div>}
                             {(F.flight.departure?.terminal || F.flight.departure?.gate) && (
-                              <div>Terminal/Gate: {F.flight.departure.terminal || '-'} / {F.flight.departure.gate || '-'}</div>
+                              <div>{t('itinerary.terminalGate')}: {F.flight.departure.terminal || '-'} / {F.flight.departure.gate || '-'}</div>
                             )}
-                            {typeof F.flight.departure?.delay === 'number' && <div>Delay: {F.flight.departure.delay} min</div>}
+                            {typeof F.flight.departure?.delay === 'number' && <div>{t('itinerary.delay')}: {F.flight.departure.delay} min</div>}
                           </div>
                           <div>
-                            <div className="font-semibold text-gray-900">Arrival</div>
+                            <div className="font-semibold text-gray-900">{t('itinerary.arrival')}</div>
                             {(() => {
                               const leg = F.flight?.arrival;
-                              const t = leg?.best || leg?.estimated || leg?.scheduled || leg?.actual;
-                              const str = formatInTZ(t, leg?.timezone);
-                              return <div>Time: {str || '—'}</div>;
+                              const timePick = leg?.best || leg?.estimated || leg?.scheduled || leg?.actual;
+                              const str = formatInTZ(timePick, leg?.timezone);
+                              return <div>{t('itinerary.time')}: {str || '—'}</div>;
                             })()}
-                            {F.flight.arrival?.scheduled && <div>Scheduled: {formatInTZ(F.flight.arrival.scheduled, F.flight.arrival.timezone)}</div>}
-                            {F.flight.arrival?.estimated && <div>Estimated: {formatInTZ(F.flight.arrival.estimated, F.flight.arrival.timezone)}</div>}
-                            {F.flight.arrival?.actual && <div>Actual: {formatInTZ(F.flight.arrival.actual, F.flight.arrival.timezone)}</div>}
+                            {F.flight.arrival?.scheduled && <div>{t('itinerary.scheduled')}: {formatInTZ(F.flight.arrival.scheduled, F.flight.arrival.timezone)}</div>}
+                            {F.flight.arrival?.estimated && <div>{t('itinerary.estimated')}: {formatInTZ(F.flight.arrival.estimated, F.flight.arrival.timezone)}</div>}
+                            {F.flight.arrival?.actual && <div>{t('itinerary.actual')}: {formatInTZ(F.flight.arrival.actual, F.flight.arrival.timezone)}</div>}
                             {(F.flight.arrival?.terminal || F.flight.arrival?.gate) && (
-                              <div>Terminal/Gate: {F.flight.arrival.terminal || '-'} / {F.flight.arrival.gate || '-'}</div>
+                              <div>{t('itinerary.terminalGate')}: {F.flight.arrival.terminal || '-'} / {F.flight.arrival.gate || '-'}</div>
                             )}
-                            {typeof F.flight.arrival?.delay === 'number' && <div>Delay: {F.flight.arrival.delay} min</div>}
+                            {typeof F.flight.arrival?.delay === 'number' && <div>{t('itinerary.delay')}: {F.flight.arrival.delay} min</div>}
                           </div>
                         </div>
                       )}
@@ -966,7 +1195,7 @@ export function Itinerary({ tripId }: ItineraryProps) {
                       )}
                       <div className="flex items-center gap-2 mt-3">
                         <Input
-                          placeholder="Flight IATA (e.g., AZ611)"
+                          placeholder={t('itinerary.flightPlaceholder')}
                           value={(F?.query || '').toUpperCase()}
                           onChange={(e) => setFlightByDay((prev) => ({ ...prev, [currentDay.id]: { ...(prev[currentDay.id] as any), query: e.target.value.toUpperCase() } }))}
                         />
@@ -975,7 +1204,7 @@ export function Itinerary({ tripId }: ItineraryProps) {
                           disabled={F?.loading || !(F?.query)}
                           onClick={() => getFlightForDay(currentDay.id)}
                         >
-                          {F?.loading ? 'Loading...' : 'Get'}
+                          {F?.loading ? t('common.loading') : t('common.get')}
                         </Button>
                       </div>
                       </>
@@ -989,23 +1218,33 @@ export function Itinerary({ tripId }: ItineraryProps) {
 
               <div className="space-y-4">
                 {currentDay.activities.map((activity: Activity) => (
-                  <div key={activity.id} className="space-y-2">
-                    <Card className="p-0 overflow-hidden shadow-sm border-gray-200">
+                  <Reveal key={activity.id} delayMs={0}>
+                    <div className="space-y-2">
+                      <Card className="p-0 overflow-hidden shadow-sm border-gray-200">
                       <div className="p-5 flex items-start gap-4">
-                        <div className="text-xs text-gray-600 w-32 shrink-0">
+                        <div className="w-32 shrink-0">
                           {activity.starts_at ? (
-                            <div>
-                              {activity.starts_at}
-                              {activity.ends_at && (
-                                <span> - {activity.ends_at}</span>
-                              )}
+                            <div className="flex w-full items-center justify-center gap-1 px-2 py-1 rounded-full bg-gray-100 text-gray-800 text-xs">
+                              <Clock className="h-3 w-3" />
+                              <span>
+                                {fmtHM(activity.starts_at)}{activity.ends_at ? ` - ${fmtHM(activity.ends_at)}` : ''}
+                              </span>
                             </div>
                           ) : (
-                            <div className="flex items-center gap-1">
+                            <div className="flex w-full items-center justify-center gap-1 px-2 py-1 rounded-full bg-gray-100 text-gray-800 text-xs">
                               <Clock className="h-3 w-3" />
-                              <span>No time</span>
+                              <span>{t('itinerary.noTime')}</span>
                             </div>
                           )}
+                          {(() => {
+                            const t = (activity as any).type as string | undefined;
+                            const Icon = t === 'food' ? Utensils : t === 'museum' ? Landmark : t === 'sightseeing' ? Camera : t === 'transport' ? Bus : null;
+                            return Icon ? (
+                              <div className="mt-2 h-16 w-full rounded-lg bg-gray-200 flex items-center justify-center">
+                                <Icon className="h-8 w-8 text-gray-700" />
+                              </div>
+                            ) : null;
+                          })()}
                         </div>
                         <div className="flex-1">
                           <div className="flex items-start justify-between">
@@ -1018,13 +1257,7 @@ export function Itinerary({ tripId }: ItineraryProps) {
                                 </div>
                               )}
                             </div>
-                            <div className="w-24 h-16 rounded-lg bg-gray-200 flex items-center justify-center">
-                              {(() => {
-                                const t = (activity as any).type as string | undefined;
-                                const Icon = t === 'food' ? Utensils : t === 'museum' ? Landmark : t === 'sightseeing' ? Camera : t === 'transport' ? Bus : null;
-                                return Icon ? <Icon className="h-6 w-6 text-gray-700" /> : null;
-                              })()}
-                            </div>
+                            {/* removed right-side type icon per UX request */}
                           </div>
                           <div className="flex items-center justify-between mt-4 text-sm text-gray-600">
                             <div className="flex items-center gap-4">
@@ -1041,65 +1274,139 @@ export function Itinerary({ tripId }: ItineraryProps) {
                           </div>
                         </div>
                       </div>
-                    </Card>
+                      </Card>
                     {openCommentsFor[activity.id] && (
                       <Card className="p-4">
                         <div className="space-y-3">
                           <div className="space-y-2 max-h-52 overflow-auto">
-                            {(commentsByActivity[activity.id] || []).map((c) => (
-                              <div key={c.id} className="text-sm">
-                                <div className="text-gray-900 font-medium">{c.user_name || (c.user_email ? c.user_email.split('@')[0] : 'User')}</div>
-                                <div className="text-gray-700">{c.content}</div>
-                              </div>
-                            ))}
+                            {(commentsByActivity[activity.id] || []).map((c) => {
+                              const isUrl = typeof c.content === 'string' && /^https?:\/\//i.test(c.content);
+                              const lower = (c.content || '').toLowerCase();
+                              const isImage = isUrl && (lower.endsWith('.png') || lower.endsWith('.jpg') || lower.endsWith('.jpeg') || lower.endsWith('.gif') || lower.endsWith('.webp'));
+                              const isVideo = isUrl && (lower.endsWith('.mp4') || lower.endsWith('.webm') || lower.endsWith('.ogg'));
+                              const isAudio = isUrl && (lower.endsWith('.mp3') || lower.endsWith('.wav') || lower.endsWith('.m4a') || lower.endsWith('.ogg'));
+                              return (
+                                <div key={c.id} className="text-sm space-y-1">
+                                  <div className="text-gray-900 font-medium">{c.user_name || (c.user_email ? c.user_email.split('@')[0] : t('itinerary.user'))}</div>
+                                  {isUrl ? (
+                                    isImage ? (
+                                      <a href={c.content} target="_blank" rel="noreferrer" className="block">
+                                        <img src={c.content} alt="attachment" className="max-h-48 rounded border" />
+                                      </a>
+                                    ) : isVideo ? (
+                                      <video controls className="max-h-64 rounded border">
+                                        <source src={c.content} />
+                                      </video>
+                                    ) : isAudio ? (
+                                      <audio controls className="w-full">
+                                        <source src={c.content} />
+                                      </audio>
+                                    ) : (
+                                      <a href={c.content} target="_blank" rel="noreferrer" className="text-blue-600 underline break-all">{c.content}</a>
+                                    )
+                                  ) : (
+                                    <div className="text-gray-700 break-words">{c.content}</div>
+                                  )}
+                                </div>
+                              );
+                            })}
                           </div>
                           <div className="flex gap-2">
                             <Input
-                              placeholder="Add a comment"
+                              placeholder={t('itinerary.commentPlaceholder')}
                               value={newCommentByActivity[activity.id] || ''}
                               onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewCommentByActivity((prev) => ({ ...prev, [activity.id]: e.target.value }))}
                             />
-                            <Button size="sm" onClick={() => addComment(activity.id)} disabled={!(newCommentByActivity[activity.id] || '').trim()}>Send</Button>
+                            <Button size="sm" onClick={() => addComment(activity.id)} disabled={!(newCommentByActivity[activity.id] || '').trim()}>{t('common.send')}</Button>
+                            <label className="inline-flex items-center justify-center px-3 text-sm border rounded-md cursor-pointer bg-white">
+                              <input
+                                type="file"
+                                className="hidden"
+                                onChange={(e) => {
+                                  const f = e.target.files?.[0];
+                                  if (f) uploadMedia(activity.id, f);
+                                }}
+                                accept="image/*,video/*,audio/*,application/pdf"
+                              />
+                              {mediaUploadingByActivity[activity.id] ? t('common.loading') : 'Upload'}
+                            </label>
                           </div>
                         </div>
                       </Card>
                     )}
-                  </div>
+                    </div>
+                  </Reveal>
                 ))}
               </div>
 
               {newActivityDayId === currentDay.id && (
-                <Card className="p-4 space-y-2">
+                <Card className="p-4 space-y-2 relative" onKeyDown={(e) => { if (e.key === 'Escape') {
+                  setNewActivityDayId(null);
+                  setNewActivityTitle('');
+                  setNewActivityLocation('');
+                  setNewActivityStartTime('');
+                  setNewActivityEndTime('');
+                  setNewActivityType('other');
+                  setPlacePreds([]);
+                }}}>
+                  <button
+                    type="button"
+                    className="absolute top-2 right-2 text-gray-500 hover:text-gray-900"
+                    onClick={() => {
+                      setNewActivityDayId(null);
+                      setNewActivityTitle('');
+                      setNewActivityLocation('');
+                      setNewActivityStartTime('');
+                      setNewActivityEndTime('');
+                      setNewActivityType('other');
+                      setPlacePreds([]);
+                    }}
+                    aria-label="Close add activity form"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
                   <Input
-                    placeholder="Activity title"
+                    placeholder={t('itinerary.activityTitle')}
                     value={newActivityTitle}
                     onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewActivityTitle(e.target.value)}
+                    className="rounded-lg border border-gray-300 bg-white/90 shadow-sm focus:border-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900 backdrop-blur"
                   />
                   <div>
-                    <label className="text-xs text-gray-600">Type</label>
-                    <select
-                      className="mt-1 w-full border rounded-md px-2 py-2 text-sm"
-                      value={newActivityType}
-                      onChange={(e) => setNewActivityType(e.target.value as any)}
-                    >
-                      <option value="food">Food</option>
-                      <option value="museum">Museum</option>
-                      <option value="sightseeing">Sightseeing</option>
-                      <option value="transport">Transport</option>
-                      <option value="other">Other</option>
-                    </select>
+                    <label className="text-xs text-gray-600">{t('itinerary.type')}</label>
+                    <div className="relative mt-1">
+                      <select
+                        className="appearance-none w-full rounded-lg border border-gray-300 bg-white/90 px-3 py-2 pr-9 text-sm shadow-sm transition focus:border-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900 backdrop-blur"
+                        value={newActivityType}
+                        onChange={(e) => setNewActivityType(e.target.value as any)}
+                      >
+                        <option value="food">{t('itinerary.type.food')}</option>
+                        <option value="museum">{t('itinerary.type.museum')}</option>
+                        <option value="sightseeing">{t('itinerary.type.sightseeing')}</option>
+                        <option value="transport">{t('itinerary.type.transport')}</option>
+                        <option value="other">{t('itinerary.type.other')}</option>
+                      </select>
+                      <svg
+                        className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500"
+                        viewBox="0 0 20 20"
+                        fill="currentColor"
+                        aria-hidden="true"
+                      >
+                        <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.24 4.24a.75.75 0 01-1.06 0L5.25 8.29a.75.75 0 01-.02-1.08z" clipRule="evenodd" />
+                      </svg>
+                    </div>
                   </div>
                   <div className="relative">
                     <Input
-                      placeholder="Location"
+                      placeholder={t('itinerary.location')}
                       value={newActivityLocation}
+                      className="rounded-lg border border-gray-300 bg-white/90 shadow-sm focus:border-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900 backdrop-blur"
                       onChange={async (e: React.ChangeEvent<HTMLInputElement>) => {
                         const v = e.target.value;
                         setNewActivityLocation(v);
                         setPlaceIdForActivity(null);
                         setPlaceCoordsForActivity({ lat: null, lng: null });
                         if (placeDebounceRef.current) clearTimeout(placeDebounceRef.current as any);
-                        const t = setTimeout(async () => {
+                        const timerId = setTimeout(async () => {
                           if (!v || v.length < 2) {
                             setPlacePreds([]);
                             return;
@@ -1108,12 +1415,16 @@ export function Itinerary({ tripId }: ItineraryProps) {
                             setPlaceLoading(true);
                             const res = await fetch(`/api/places/autocomplete?q=${encodeURIComponent(v)}`);
                             const json = await res.json();
-                            setPlacePreds(Array.isArray(json?.predictions) ? json.predictions : []);
+                            const preds = Array.isArray(json?.predictions) ? (json.predictions as any[]).map((p: any) => ({
+                              description: String(p?.description ?? p?.structured_formatting?.main_text ?? ''),
+                              place_id: String(p?.place_id ?? p?.placeId ?? ''),
+                            })) : [];
+                            setPlacePreds(preds);
                           } finally {
                             setPlaceLoading(false);
                           }
                         }, 300) as any;
-                        placeDebounceRef.current = t;
+                        placeDebounceRef.current = timerId;
                       }}
                     />
                     {newActivityLocation && placePreds.length > 0 && (
@@ -1146,36 +1457,62 @@ export function Itinerary({ tripId }: ItineraryProps) {
                       </div>
                     )}
                     {placeLoading && (
-                      <div className="text-xs text-gray-500 mt-1">Searching...</div>
+                      <div className="text-xs text-gray-500 mt-1">{t('common.searching')}</div>
                     )}
                   </div>
                   <div className="flex gap-2">
                     <Input
                       type="time"
-                      placeholder="Start time"
+                      placeholder={t('itinerary.startTime')}
                       value={newActivityStartTime}
+                      className="rounded-lg border border-gray-300 bg-white/90 shadow-sm focus:border-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900 backdrop-blur"
                       onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewActivityStartTime(e.target.value)}
                     />
                     <Input
                       type="time"
-                      placeholder="End time"
+                      placeholder={t('itinerary.endTime')}
                       value={newActivityEndTime}
+                      className="rounded-lg border border-gray-300 bg-white/90 shadow-sm focus:border-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900 backdrop-blur"
                       onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewActivityEndTime(e.target.value)}
                     />
                   </div>
                   <div className="flex gap-2">
-                    <Button onClick={() => addActivity(currentDay.id)} size="sm">Add</Button>
-                    <Button variant="outline" onClick={() => setNewActivityDayId(null)} size="sm">Cancel</Button>
+                    <Button type="button" onClick={() => addActivity(currentDay.id)} size="sm">{t('common.add')}</Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        setNewActivityDayId(null);
+                        setNewActivityTitle('');
+                        setNewActivityLocation('');
+                        setNewActivityStartTime('');
+                        setNewActivityEndTime('');
+                        setNewActivityType('other');
+                        setPlacePreds([]);
+                      }}
+                      size="sm"
+                    >
+                      {t('common.cancel')}
+                    </Button>
                   </div>
                 </Card>
               )}
             </div>
-          );
-        })()}
+        );
+      })()}
       </div>
+    </div>
 
-      {/* Chat launcher */}
-      <div className="fixed bottom-6 right-6 z-50">
+      {/* Floating launchers: Polls (above) and Chat (below) */}
+      <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-3">
+        <Button
+          className="relative rounded-full shadow-lg h-12 w-12 p-0"
+          size="icon"
+          onClick={() => setIsPollsOpen((v) => !v)}
+          aria-label="Open polls"
+        >
+          <BarChart3 className="h-5 w-5" />
+        </Button>
         <Button
           className="relative rounded-full shadow-lg h-12 w-12 p-0"
           size="icon"
@@ -1203,13 +1540,29 @@ export function Itinerary({ tripId }: ItineraryProps) {
         </div>
       )}
 
+      {/* Compact bottom-right polls box (stacked a bit higher) */}
+      {isPollsOpen && (
+        <div className="fixed bottom-[90px] right-6 z-50 w-[360px] sm:w-[420px] max-w-[95vw] max-h-[70vh] overflow-hidden flex flex-col">
+          <Card className="p-0 overflow-hidden w-full h-full">
+            <div className="relative p-3 border-b flex items-center justify-between">
+              <div className="font-medium text-gray-900">Encuestas</div>
+              <Button variant="ghost" size="icon" onClick={() => setIsPollsOpen(false)} aria-label="Close polls">
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <div className="p-3 overflow-auto" style={{ maxHeight: '60vh' }}>
+              <Polls tripId={tripId} />
+            </div>
+          </Card>
+        </div>
+      )}
+
       {/* Expenses modal (restores previous behavior) */}
       <Dialog open={isExpensesOpen} onOpenChange={setIsExpensesOpen}>
         <DialogContent className="max-w-2xl p-0">
           <Expenses tripId={tripId} />
         </DialogContent>
       </Dialog>
-
-    </div>
+    </>
   );
 }

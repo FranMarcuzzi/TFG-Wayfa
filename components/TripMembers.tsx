@@ -9,6 +9,8 @@ import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { UserPlus, Mail, X } from 'lucide-react';
+import { toast } from '@/hooks/use-toast';
+import { ToastAction } from '@/components/ui/toast';
 import {
   Dialog,
   DialogContent,
@@ -165,12 +167,12 @@ export function TripMembers({ tripId }: TripMembersProps) {
       // Create invitation record for THIS specific trip
       const { error: inviteError } = await supabase
         .from('trip_invitations')
-        .insert<Database['public']['Tables']['trip_invitations']['Insert']>({
-          trip_id: tripId, // CRITICAL: Must be specific to this trip
+        .insert({
+          trip_id: tripId,
           email: inviteEmail.toLowerCase(),
           invited_by: user.id,
           status: 'pending',
-        });
+        } as any);
 
       if (inviteError) throw inviteError;
 
@@ -178,7 +180,7 @@ export function TripMembers({ tripId }: TripMembersProps) {
       setInviteError('');
       setInviteEmail('');
       setIsDialogOpen(false);
-      alert(`Invitation sent to ${inviteEmail}! They will see it when they log in.`);
+      toast({ title: 'Invitation sent', description: `${inviteEmail} will see it when they log in.` });
 
     } catch (error: any) {
       console.error('Error inviting member:', error);
@@ -191,23 +193,37 @@ export function TripMembers({ tripId }: TripMembersProps) {
   const removeMember = async (memberUserId: string) => {
     if (!isOrganizer) return;
     if (memberUserId === currentUserId) {
-      alert('You cannot remove yourself as organizer');
+      toast({ variant: 'destructive', title: 'Action not allowed', description: 'You cannot remove yourself as organizer' });
       return;
     }
 
-    try {
-      const { error } = await supabase
-        .from('trip_members')
-        .delete()
-        .eq('trip_id', tripId)
-        .eq('user_id', memberUserId);
-
-      if (error) throw error;
-
-      setMembers(members.filter(m => m.user_id !== memberUserId));
-    } catch (error) {
-      console.error('Error removing member:', error);
-    }
+    const target = members.find((m) => m.user_id === memberUserId);
+    const name = target ? getDisplayName(target) : 'this user';
+    toast({
+      title: 'Remove participant?',
+      description: `This will remove ${name} from the trip`,
+      action: (
+        <ToastAction
+          altText="Remove"
+          onClick={async () => {
+            try {
+              const { error } = await supabase
+                .from('trip_members')
+                .delete()
+                .eq('trip_id', tripId)
+                .eq('user_id', memberUserId);
+              if (error) throw error;
+              setMembers((prev) => prev.filter((m) => m.user_id !== memberUserId));
+              toast({ title: 'Participant removed' });
+            } catch (e: any) {
+              toast({ variant: 'destructive', title: 'Failed to remove', description: e?.message || 'Unexpected error' });
+            }
+          }}
+        >
+          Remove
+        </ToastAction>
+      ),
+    });
   };
 
   const getRoleBadgeColor = (role: string) => {
@@ -326,7 +342,6 @@ export function TripMembers({ tripId }: TripMembersProps) {
                       <Badge variant="secondary" className={getRoleBadgeColor(member.role)}>
                         {member.role}
                       </Badge>
-                      <span className="text-xs text-gray-500">{member.email}</span>
                     </div>
                   </div>
                 </div>

@@ -1,6 +1,8 @@
 'use client';
 
 import { useState } from 'react';
+import Player from 'lottie-react';
+import loadingAnim from '@/public/animations/loading.json';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { signIn } from '@/lib/auth';
@@ -36,8 +38,13 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-50">
-      <Card className="w-full max-w-md p-8 space-y-6">
+    <div className="relative flex items-center justify-center min-h-screen bg-gray-50">
+      {loading && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-white/80 backdrop-blur-sm">
+          <Player autoplay loop animationData={loadingAnim as any} style={{ width: 280, height: 280 }} />
+        </div>
+      )}
+      <Card className="w-full max-w-md p-8 space-y-6 relative">
         <div className="text-center">
           <h1 className="text-3xl font-semibold text-gray-900">Wayfa</h1>
           <p className="mt-2 text-sm text-gray-600">Sign in to your account</p>
@@ -81,7 +88,7 @@ export default function LoginPage() {
           </div>
 
           <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? 'Signing in...' : 'Sign in'}
+            {loading ? 'Signing in…' : 'Sign in'}
           </Button>
         </form>
 

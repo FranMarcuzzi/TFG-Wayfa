@@ -62,6 +62,22 @@ const config: Config = {
         },
       },
       keyframes: {
+        'fade-in': {
+          from: { opacity: '0' },
+          to: { opacity: '1' },
+        },
+        'slide-up': {
+          from: { transform: 'translateY(12px)', opacity: '0' },
+          to: { transform: 'translateY(0)', opacity: '1' },
+        },
+        'slide-in': {
+          from: { transform: 'translateX(12px)', opacity: '0' },
+          to: { transform: 'translateX(0)', opacity: '1' },
+        },
+        'loading-bar': {
+          '0%': { transform: 'translateX(-100%)' },
+          '100%': { transform: 'translateX(100%)' },
+        },
         'accordion-down': {
           from: {
             height: '0',
@@ -80,6 +96,10 @@ const config: Config = {
         },
       },
       animation: {
+        'fade-in': 'fade-in 500ms ease-out both',
+        'slide-up': 'slide-up 500ms cubic-bezier(0.22, 1, 0.36, 1) both',
+        'slide-in': 'slide-in 500ms cubic-bezier(0.22, 1, 0.36, 1) both',
+        'loading-bar': 'loading-bar 1.2s ease-in-out infinite',
         'accordion-down': 'accordion-down 0.2s ease-out',
         'accordion-up': 'accordion-up 0.2s ease-out',
       },

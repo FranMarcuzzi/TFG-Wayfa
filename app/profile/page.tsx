@@ -10,6 +10,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { useI18n } from '@/components/i18n/I18nProvider';
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -18,6 +19,8 @@ export default function ProfilePage() {
   const [email, setEmail] = useState<string>('');
   const [displayName, setDisplayName] = useState<string>('');
   const [edit, setEdit] = useState(false);
+  const { t, locale, setLocale } = useI18n();
+  const [language, setLanguage] = useState<string>(locale);
 
   useEffect(() => {
     (async () => {
@@ -32,7 +35,7 @@ export default function ProfilePage() {
       // fetch profile; if not exists, create a minimal one
       const { data: profile } = await supabase
         .from('user_profiles')
-        .select('display_name')
+        .select('display_name, language')
         .eq('user_id', user.id)
         .maybeSingle();
 
@@ -41,10 +44,18 @@ export default function ProfilePage() {
           user_id: user.id,
           email: user.email,
           display_name: null,
+          language: language || null,
         } as any);
         setDisplayName('');
       } else {
         setDisplayName((profile as any).display_name || '');
+        const dbLang = (profile as any).language as string | null;
+        if (dbLang) {
+          const normalized = dbLang === 'profile.lang.spanish' ? 'es' : dbLang === 'profile.lang.english' ? 'en' : dbLang;
+          const finalLang = (normalized === 'en' || normalized === 'es') ? normalized : 'en';
+          setLanguage(finalLang);
+          setLocale(finalLang);
+        }
       }
 
       setLoading(false);
@@ -69,7 +80,10 @@ export default function ProfilePage() {
         user_id: user.id,
         email: user.email,
         display_name: displayName || null,
+        language: language || null,
       } as any);
+
+    if (language) setLocale(language);
 
     setSaving(false);
     setEdit(false);
@@ -86,7 +100,7 @@ export default function ProfilePage() {
         <div className="min-h-screen bg-gray-50">
           <NavBar />
           <main className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-            <div className="text-gray-600">Loading profile...</div>
+            <div className="text-gray-600">{t('profile.loading')}</div>
           </main>
         </div>
       </AuthGuard>
@@ -100,7 +114,7 @@ export default function ProfilePage() {
         <main className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="flex justify-end mb-4">
             <Link href="/dashboard" className="inline-flex items-center px-4 py-2 rounded-md bg-black text-white shadow-[0_6px_0_rgba(0,0,0,0.2)]">
-              Back to Dashboard
+              {t('profile.back')}
             </Link>
           </div>
 
@@ -110,10 +124,10 @@ export default function ProfilePage() {
                 {initials(displayName || email)}
               </AvatarFallback>
             </Avatar>
-            <h1 className="mt-4 text-2xl font-bold text-gray-900">{displayName || 'Your Name'}</h1>
+            <h1 className="mt-4 text-2xl font-bold text-gray-900">{displayName || t('profile.subtitle')}</h1>
             <p className="text-gray-600">{email}</p>
             <Button onClick={() => setEdit(true)} variant="secondary" className="mt-3" disabled={edit}>
-              Edit Profile
+              {t('profile.edit')}
             </Button>
           </div>
 
@@ -123,8 +137,8 @@ export default function ProfilePage() {
                 <div className="flex items-center gap-3">
                   <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center">👤</div>
                   <div>
-                    <div className="font-medium text-gray-900">Personal Data</div>
-                    <div className="text-sm text-gray-500">Name and surname</div>
+                    <div className="font-medium text-gray-900">{t('profile.title')}</div>
+                    <div className="text-sm text-gray-500">{t('profile.subtitle')}</div>
                   </div>
                 </div>
                 <div className="w-1/2 max-w-sm">
@@ -132,7 +146,7 @@ export default function ProfilePage() {
                     value={displayName}
                     onChange={(e) => setDisplayName(e.target.value)}
                     disabled={!edit}
-                    placeholder="e.g. Francisco Marcuzzi"
+                    placeholder={t('profile.name.placeholder')}
                   />
                 </div>
               </div>
@@ -141,11 +155,24 @@ export default function ProfilePage() {
                 <div className="flex items-center gap-3">
                   <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center">🌐</div>
                   <div>
-                    <div className="font-medium text-gray-900">Language</div>
-                    <div className="text-sm text-gray-500">Coming soon</div>
+                    <div className="font-medium text-gray-900">{t('profile.language')}</div>
+                    <div className="text-sm text-gray-500">{t('profile.language.sub')}</div>
                   </div>
                 </div>
-                <div className="text-sm text-gray-600">English</div>
+                <div className="text-sm text-gray-600">
+                  {edit ? (
+                    <select
+                      value={language}
+                      onChange={(e) => setLanguage(e.target.value)}
+                      className="border rounded-md px-2 py-1 bg-white"
+                    >
+                      <option value="en">{t('profile.lang.english')}</option>
+                      <option value="es">{t('profile.lang.spanish')}</option>
+                    </select>
+                  ) : (
+                    <span>{language === 'es' ? t('profile.lang.spanish') : t('profile.lang.english')}</span>
+                  )}
+                </div>
               </div>
 
               <div className="flex items-center justify-between p-4">
@@ -164,12 +191,12 @@ export default function ProfilePage() {
           </Card>
 
           <div className="flex justify-end gap-3 mt-4">
-            <Button variant="outline" onClick={() => setEdit(false)} disabled={!edit}>Cancel</Button>
-            <Button onClick={saveProfile} disabled={!edit || saving}>{saving ? 'Saving...' : 'Save changes'}</Button>
+            <Button variant="outline" onClick={() => setEdit(false)} disabled={!edit}>{t('profile.cancel')}</Button>
+            <Button onClick={saveProfile} disabled={!edit || saving}>{saving ? 'Saving...' : t('profile.save')}</Button>
           </div>
 
           <div className="mt-8">
-            <Button variant="destructive" className="w-full" onClick={logout}>Log out</Button>
+            <Button variant="destructive" className="w-full" onClick={logout}>{t('profile.logout')}</Button>
             <div className="text-center text-xs text-gray-500 mt-2">Delete account</div>
           </div>
         </main>

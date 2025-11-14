@@ -4,10 +4,12 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { signOut } from '@/lib/auth';
 import { Button } from '@/components/ui/button';
-import { LogOut, User } from 'lucide-react';
+import { LogOut, User, Globe } from 'lucide-react';
+import { useI18n } from '@/components/i18n/I18nProvider';
 
 export function NavBar() {
   const router = useRouter();
+  const { t } = useI18n();
 
   const handleSignOut = async () => {
     await signOut();
@@ -23,9 +25,13 @@ export function NavBar() {
           </Link>
 
           <div className="flex items-center gap-2">
+            <Link href="/travel-requirements" className="inline-flex items-center gap-2 px-3 py-2 text-sm rounded-md hover:bg-gray-100">
+              <Globe className="h-4 w-4" />
+              {t('nav.travel')}
+            </Link>
             <Link href="/profile" className="inline-flex items-center gap-2 px-3 py-2 text-sm rounded-md hover:bg-gray-100">
               <User className="h-4 w-4" />
-              Profile
+              {t('nav.profile')}
             </Link>
             <Button
               variant="ghost"
@@ -34,7 +40,7 @@ export function NavBar() {
               className="flex items-center gap-2"
             >
               <LogOut className="h-4 w-4" />
-              Sign out
+              {t('nav.signOut')}
             </Button>
           </div>
         </div>

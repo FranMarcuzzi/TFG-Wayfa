@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Mail, Check, X } from 'lucide-react';
 import type { Database } from '@/lib/supabase/types';
+import { toast } from '@/hooks/use-toast';
 
 interface Invitation {
   id: string;
@@ -71,8 +72,10 @@ export function InvitationsList() {
       }
     } catch (error) {
       console.error('Error loading invitations:', error);
+      toast({ variant: 'destructive', title: 'Failed to load invitations' });
     } finally {
       setLoading(false);
+      try { window.dispatchEvent(new CustomEvent('dashboard-section-loaded', { detail: 'invitations' })); } catch {}
     }
   };
 
@@ -93,11 +96,11 @@ export function InvitationsList() {
       if (!existingMember) {
         const { error: memberError } = await supabase
           .from('trip_members')
-          .insert<Database['public']['Tables']['trip_members']['Insert']>({
+          .insert({
             trip_id: invitation.trip_id,
             user_id: user.id,
             role: 'participant',
-          });
+          } as any);
 
         if (memberError) {
           // If it's a duplicate key error, continue anyway (user is already a member)
@@ -110,7 +113,7 @@ export function InvitationsList() {
       // Update invitation status
       const { error: inviteError } = await supabase
         .from('trip_invitations')
-        .update<Database['public']['Tables']['trip_invitations']['Update']>({ status: 'accepted' })
+        .update({ status: 'accepted' } as any)
         .eq('id', invitation.id);
 
       if (inviteError) {
@@ -133,10 +136,11 @@ export function InvitationsList() {
       // Redirect to the trip page
       router.push(`/trip/${invitation.trip_id}`);
       router.refresh();
+      toast({ title: 'Invitation accepted', description: 'You joined the trip.' });
     } catch (error: any) {
       console.error('Error accepting invitation:', error);
       const message = error?.message || JSON.stringify(error);
-      alert(`Failed to accept invitation: ${message}`);
+      toast({ variant: 'destructive', title: 'Failed to accept invitation', description: message });
     }
   };
 
@@ -144,14 +148,16 @@ export function InvitationsList() {
     try {
       const { error } = await supabase
         .from('trip_invitations')
-        .update<Database['public']['Tables']['trip_invitations']['Update']>({ status: 'declined' })
+        .update({ status: 'declined' } as any)
         .eq('id', invitationId);
 
       if (error) throw error;
 
       setInvitations(invitations.filter((inv) => inv.id !== invitationId));
+      toast({ title: 'Invitation declined' });
     } catch (error) {
       console.error('Error declining invitation:', error);
+      toast({ variant: 'destructive', title: 'Failed to decline invitation' });
     }
   };
 

@@ -6,7 +6,8 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Plus, X, Check } from 'lucide-react';
+import { Plus, X, Check, Trash2 } from 'lucide-react';
+import { toast } from '@/hooks/use-toast';
 
 interface PollOption {
   id: string;
@@ -37,12 +38,24 @@ export function Polls({ tripId }: PollsProps) {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [newQuestion, setNewQuestion] = useState('');
   const [newOptions, setNewOptions] = useState(['', '']);
+  const [creating, setCreating] = useState(false);
+  const [showDebug, setShowDebug] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
     getCurrentUser();
     loadPolls();
     subscribeToChanges();
+    const t = setTimeout(() => { loadPolls(); }, 300);
+    return () => { try { clearTimeout(t); } catch {} };
   }, [tripId]);
+
+  useEffect(() => {
+    if (!showCreateForm) {
+      // when form closes, refresh list
+      loadPolls();
+    }
+  }, [showCreateForm]);
 
   const getCurrentUser = async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -52,66 +65,94 @@ export function Polls({ tripId }: PollsProps) {
   };
 
   const loadPolls = async () => {
-    const { data: pollsData } = await supabase
-      .from('polls')
-      .select(`
-        *,
-        user_profiles!polls_created_by_fkey (
-          email,
-          display_name
-        )
-      `)
-      .eq('trip_id', tripId)
-      .order('created_at', { ascending: false });
+    try {
+      let pollsData: any[] | null = null;
+      // First try with join to user_profiles (may fail if relation name differs)
+      const joined = await supabase
+        .from('polls')
+        .select(`
+          *,
+          user_profiles!polls_created_by_fkey (
+            email,
+            display_name
+          )
+        `)
+        .eq('trip_id', tripId)
+        .order('created_at', { ascending: false });
+      if (!joined.error) {
+        pollsData = joined.data as any[];
+      } else {
+        // Fallback: simple select without join
+        const simple = await supabase
+          .from('polls')
+          .select('*')
+          .eq('trip_id', tripId)
+          .order('created_at', { ascending: false });
+        if (simple.error) throw simple.error;
+        pollsData = simple.data as any[];
+      }
 
-    if (pollsData) {
+      const safePolls = Array.isArray(pollsData) ? pollsData : [];
       const pollsWithOptions = await Promise.all(
-        pollsData.map(async (poll: any) => {
-          const { data: options } = await supabase
-            .from('poll_options')
-            .select('*')
-            .eq('poll_id', poll.id);
+        safePolls.map(async (poll: any) => {
+          try {
+            const { data: options } = await supabase
+              .from('poll_options')
+              .select('*')
+              .eq('poll_id', poll.id);
 
-          const optionsWithVotes = await Promise.all(
-            (options || []).map(async (option: any) => {
-              const { count } = await supabase
-                .from('poll_votes')
-                .select('*', { count: 'exact', head: true })
-                .eq('option_id', option.id);
+            const optionsWithVotes = await Promise.all(
+              (options || []).map(async (option: any) => {
+                try {
+                  const { count } = await supabase
+                    .from('poll_votes')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('option_id', option.id);
+                  return { ...option, votes: count || 0 };
+                } catch {
+                  return { ...option, votes: 0 };
+                }
+              })
+            );
 
-              return {
-                ...option,
-                votes: count || 0,
-              };
-            })
-          );
+            let userVote = null;
+            try {
+              const { data: { user } } = await supabase.auth.getUser();
+              if (user) {
+                const { data: vote } = await supabase
+                  .from('poll_votes')
+                  .select('option_id')
+                  .eq('poll_id', poll.id)
+                  .eq('user_id', user.id)
+                  .maybeSingle();
+                if (vote) userVote = (vote as any).option_id;
+              }
+            } catch {}
 
-          const { data: { user } } = await supabase.auth.getUser();
-          let userVote = null;
-          if (user) {
-            const { data: vote } = await supabase
-              .from('poll_votes')
-              .select('option_id')
-              .eq('poll_id', poll.id)
-              .eq('user_id', user.id)
-              .maybeSingle();
-
-            if (vote) {
-              userVote = (vote as any).option_id;
-            }
+            return {
+              ...poll,
+              options: optionsWithVotes,
+              userVote,
+              creator_name: poll.user_profiles?.display_name || null,
+              creator_email: poll.user_profiles?.email || 'Unknown',
+            };
+          } catch {
+            return {
+              ...poll,
+              options: [],
+              userVote: null,
+              creator_name: poll.user_profiles?.display_name || null,
+              creator_email: poll.user_profiles?.email || 'Unknown',
+            };
           }
-
-          return {
-            ...poll,
-            options: optionsWithVotes,
-            userVote,
-            creator_name: poll.user_profiles?.display_name || null,
-            creator_email: poll.user_profiles?.email || 'Unknown',
-          };
         })
       );
 
       setPolls(pollsWithOptions);
+      // debug length toast (non-destructive)
+      // toast({ title: `Loaded polls: ${pollsWithOptions.length}` });
+    } catch {
+      setPolls([]);
     }
   };
 
@@ -159,36 +200,55 @@ export function Polls({ tripId }: PollsProps) {
   };
 
   const createPoll = async () => {
-    if (!newQuestion.trim() || !currentUserId) return;
-
-    const validOptions = newOptions.filter((opt) => opt.trim());
-    if (validOptions.length < 2) {
-      alert('Please add at least 2 options');
+    if (!newQuestion.trim()) {
+      toast({ variant: 'destructive', title: 'Missing question', description: 'Please enter a question' });
+      return;
+    }
+    if (!currentUserId) {
+      toast({ variant: 'destructive', title: 'Not signed in', description: 'Please sign in to create a poll' });
       return;
     }
 
-    const { data: poll, error: pollError } = await supabase
-      .from('polls')
-      .insert({
-        trip_id: tripId,
-        question: newQuestion,
-        created_by: currentUserId,
-      } as any)
-      .select()
-      .single();
+    const validOptions = newOptions.filter((opt) => opt.trim());
+    if (validOptions.length < 2) {
+      toast({ variant: 'destructive', title: 'Add more options', description: 'Please add at least 2 options' });
+      return;
+    }
 
-    if (pollError || !poll) return;
+    try {
+      setCreating(true);
+      const { data: poll, error: pollError } = await supabase
+        .from('polls')
+        .insert({
+          trip_id: tripId,
+          question: newQuestion,
+          created_by: currentUserId,
+        } as any)
+        .select()
+        .single();
 
-    const optionsToInsert = validOptions.map((label) => ({
-      poll_id: (poll as any).id,
-      label,
-    }));
+      if (pollError || !poll) {
+        throw new Error(pollError?.message || 'Failed to create poll');
+      }
 
-    await supabase.from('poll_options').insert(optionsToInsert as any);
+      const optionsToInsert = validOptions.map((label) => ({
+        poll_id: (poll as any).id,
+        label,
+      }));
 
-    setNewQuestion('');
-    setNewOptions(['', '']);
-    setShowCreateForm(false);
+      const { error: optErr } = await supabase.from('poll_options').insert(optionsToInsert as any);
+      if (optErr) throw optErr;
+
+      toast({ title: 'Poll created' });
+      setNewQuestion('');
+      setNewOptions(['', '']);
+      setShowCreateForm(false);
+      await loadPolls();
+    } catch (e: any) {
+      toast({ variant: 'destructive', title: 'Create failed', description: e?.message || 'Could not create poll' });
+    } finally {
+      setCreating(false);
+    }
   };
 
   const vote = async (pollId: string, optionId: string) => {
@@ -217,6 +277,23 @@ export function Polls({ tripId }: PollsProps) {
     const updated = [...newOptions];
     updated[index] = value;
     setNewOptions(updated);
+  };
+
+  const deletePoll = async (pollId: string) => {
+    try {
+      setDeletingId(pollId);
+      // Delete votes, options, then poll
+      await supabase.from('poll_votes').delete().eq('poll_id', pollId);
+      await supabase.from('poll_options').delete().eq('poll_id', pollId);
+      const { error } = await supabase.from('polls').delete().eq('id', pollId);
+      if (error) throw error;
+      toast({ title: 'Poll deleted' });
+      await loadPolls();
+    } catch (e: any) {
+      toast({ variant: 'destructive', title: 'Delete failed', description: e?.message || 'Could not delete poll' });
+    } finally {
+      setDeletingId(null);
+    }
   };
 
   return (
@@ -268,8 +345,8 @@ export function Polls({ tripId }: PollsProps) {
           </div>
 
           <div className="flex gap-2">
-            <Button onClick={createPoll} size="sm">
-              Create Poll
+            <Button onClick={createPoll} size="sm" disabled={creating}>
+              {creating ? 'Creating…' : 'Create Poll'}
             </Button>
             <Button
               variant="outline"
@@ -293,15 +370,26 @@ export function Polls({ tripId }: PollsProps) {
       ) : (
         <div className="space-y-4">
           {polls.map((poll) => {
-            const totalVotes = poll.options.reduce((sum, opt) => sum + opt.votes, 0);
+            const totalVotes = (poll.options || []).reduce((sum, opt) => sum + opt.votes, 0);
 
             return (
               <Card key={poll.id} className="p-4">
-                <div className="mb-3">
-                  <h4 className="font-medium text-gray-900">{poll.question}</h4>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Created by {poll.creator_name || poll.creator_email?.split('@')[0] || 'Unknown'}
-                  </p>
+                <div className="mb-3 flex items-start justify-between gap-2">
+                  <div>
+                    <h4 className="font-medium text-gray-900">{poll.question}</h4>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Created by {poll.creator_name || poll.creator_email?.split('@')[0] || 'Unknown'}
+                    </p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => deletePoll(poll.id)}
+                    disabled={deletingId === poll.id}
+                    aria-label="Delete poll"
+                  >
+                    <Trash2 className="h-4 w-4 text-red-600" />
+                  </Button>
                 </div>
 
                 <div className="space-y-2">
