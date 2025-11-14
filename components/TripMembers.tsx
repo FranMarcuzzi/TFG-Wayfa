@@ -245,15 +245,16 @@ export function TripMembers({ tripId }: TripMembersProps) {
 
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="p-4 sm:p-6">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-xl font-semibold">Trip Members</CardTitle>
+          <CardTitle className="text-base sm:text-xl font-semibold">Trip Members</CardTitle>
           {isOrganizer && (
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
               <DialogTrigger asChild>
-                <Button size="sm" className="gap-2">
-                  <UserPlus className="w-4 h-4" />
-                  Invite
+                <Button size="sm" className="gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-3">
+                  <UserPlus className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                  <span className="hidden sm:inline">Invite</span>
+                  <span className="sm:hidden">+</span>
                 </Button>
               </DialogTrigger>
               <DialogContent>

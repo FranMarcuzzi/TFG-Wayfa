@@ -80,7 +80,7 @@ export function TripMetaEditor({ tripId }: { tripId: string }) {
       if (!canEdit) throw new Error("You don't have permission to edit this trip");
       const tripsTable = supabase.from("trips") as any;
       const { error: upErr } = await tripsTable
-        .update(payload as any)
+        .update(payload)
         .eq("id", tripId);
       if (upErr) throw upErr;
     } catch (e: any) {

@@ -243,29 +243,29 @@ export function TripList({ onCreateTrip }: TripListProps) {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <Reveal variant="fade">
-          <div className="flex items-center gap-2"> 
-            <button onClick={() => setFilter('all')} className={`px-3 py-1 rounded-full text-sm ${filter==='all'?'bg-gray-900 text-white':'bg-gray-100 text-gray-700'}`}>All</button>
-            <button onClick={() => setFilter('planning')} className={`px-3 py-1 rounded-full text-sm ${filter==='planning'?'bg-gray-900 text-white':'bg-gray-100 text-gray-700'}`}>Planning</button>
-            <button onClick={() => setFilter('active')} className={`px-3 py-1 rounded-full text-sm ${filter==='active'?'bg-gray-900 text-white':'bg-gray-100 text-gray-700'}`}>Active</button>
-            <button onClick={() => setFilter('past')} className={`px-3 py-1 rounded-full text-sm ${filter==='past'?'bg-gray-900 text-white':'bg-gray-100 text-gray-700'}`}>Past</button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <button onClick={() => setFilter('all')} className={`px-3 py-1 rounded-full text-xs sm:text-sm ${filter==='all'?'bg-gray-900 text-white':'bg-gray-100 text-gray-700'}`}>All</button>
+            <button onClick={() => setFilter('planning')} className={`px-3 py-1 rounded-full text-xs sm:text-sm ${filter==='planning'?'bg-gray-900 text-white':'bg-gray-100 text-gray-700'}`}>Planning</button>
+            <button onClick={() => setFilter('active')} className={`px-3 py-1 rounded-full text-xs sm:text-sm ${filter==='active'?'bg-gray-900 text-white':'bg-gray-100 text-gray-700'}`}>Active</button>
+            <button onClick={() => setFilter('past')} className={`px-3 py-1 rounded-full text-xs sm:text-sm ${filter==='past'?'bg-gray-900 text-white':'bg-gray-100 text-gray-700'}`}>Past</button>
           </div>
         </Reveal>
         <Reveal variant="slideIn" delayMs={80}>
           <div className="flex items-center gap-2">
-            <span className="text-sm text-gray-600">Sort by:</span>
+            <span className="text-xs sm:text-sm text-gray-600">Sort by:</span>
             <div className="relative">
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value as 'date_desc' | 'date_asc')}
-                className="text-sm appearance-none rounded-lg border border-gray-300 bg-white/90 px-3 py-2 pr-9 shadow-sm transition focus:border-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900 backdrop-blur"
+                className="text-xs sm:text-sm appearance-none rounded-lg border border-gray-300 bg-white/90 px-2 sm:px-3 py-1.5 sm:py-2 pr-8 sm:pr-9 shadow-sm transition focus:border-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900 backdrop-blur"
               >
                 <option value="date_desc">Date (newest)</option>
                 <option value="date_asc">Date (oldest)</option>
               </select>
               <svg
-                className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500"
+                className="pointer-events-none absolute right-2 sm:right-2.5 top-1/2 h-3 w-3 sm:h-4 sm:w-4 -translate-y-1/2 text-gray-500"
                 viewBox="0 0 20 20"
                 fill="currentColor"
                 aria-hidden="true"
@@ -281,11 +281,11 @@ export function TripList({ onCreateTrip }: TripListProps) {
         {filteredAndSorted.map((trip, i) => (
           <Reveal key={trip.id} variant="slideUp" delayMs={i * 60}>
             <Card
-              className="p-4 sm:p-5 hover:shadow-lg transition-shadow cursor-pointer rounded-2xl"
+              className="p-3 sm:p-4 lg:p-5 hover:shadow-lg transition-shadow cursor-pointer rounded-2xl"
               onClick={() => router.push(`/trip/${trip.id}`)}
             >
-                <div className="flex items-start gap-4">
-                  <div className="w-40 h-24 rounded-xl overflow-hidden bg-gray-200 flex-shrink-0">
+                <div className="flex flex-col sm:flex-row items-start gap-3 sm:gap-4">
+                  <div className="w-full sm:w-32 md:w-40 h-32 sm:h-20 md:h-24 rounded-xl overflow-hidden bg-gray-200 flex-shrink-0">
                     <div
                       className="w-full h-full bg-cover bg-center"
                       style={{
@@ -293,45 +293,47 @@ export function TripList({ onCreateTrip }: TripListProps) {
                       }}
                     />
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h3 className="text-lg font-semibold text-gray-900 truncate">{trip.title}</h3>
-                          {(() => {
-                            const st = statusOf(trip);
-                            return (
-                              <Badge
-                                className={
-                                  st === 'active'
-                                    ? 'bg-green-100 text-green-700 border-green-200'
-                                    : st === 'planning'
-                                    ? 'bg-blue-100 text-blue-700 border-blue-200'
-                                    : 'bg-gray-100 text-gray-700 border-gray-200'
-                                }
-                                variant="outline"
-                              >
-                                {st === 'active' ? 'Active' : st === 'planning' ? 'Planning' : 'Past'}
-                              </Badge>
-                            );
-                          })()}
+                  <div className="flex-1 min-w-0 w-full">
+                    <div className="flex flex-col gap-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h3 className="text-base sm:text-lg font-semibold text-gray-900 truncate">{trip.title}</h3>
+                            {(() => {
+                              const st = statusOf(trip);
+                              return (
+                                <Badge
+                                  className={
+                                    st === 'active'
+                                      ? 'bg-green-100 text-green-700 border-green-200'
+                                      : st === 'planning'
+                                      ? 'bg-blue-100 text-blue-700 border-blue-200'
+                                      : 'bg-gray-100 text-gray-700 border-gray-200'
+                                  }
+                                  variant="outline"
+                                >
+                                  {st === 'active' ? 'Active' : st === 'planning' ? 'Planning' : 'Past'}
+                                </Badge>
+                              );
+                            })()}
+                          </div>
+                          {trip.destination && (
+                            <div className="flex items-center gap-1.5 text-gray-600 mt-1">
+                              <MapPin className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                              <span className="text-xs sm:text-sm truncate">{trip.destination}</span>
+                            </div>
+                          )}
+                          {trip.start_date && trip.end_date && (
+                            <div className="flex items-center gap-1.5 text-gray-600 mt-1">
+                              <Calendar className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                              <span className="text-xs sm:text-sm">
+                                {format(new Date(trip.start_date), 'MMM d')} - {format(new Date(trip.end_date), 'MMM d, yyyy')}
+                              </span>
+                            </div>
+                          )}
                         </div>
-                        {trip.destination && (
-                          <div className="flex items-center gap-2 text-gray-600">
-                            <MapPin className="h-4 w-4" />
-                            <span className="text-sm">{trip.destination}</span>
-                          </div>
-                        )}
-                        {trip.start_date && trip.end_date && (
-                          <div className="flex items-center gap-2 text-gray-600 mt-1">
-                            <Calendar className="h-4 w-4" />
-                            <span className="text-sm">
-                              {format(new Date(trip.start_date), 'MMM d')} - {format(new Date(trip.end_date), 'MMM d, yyyy')}
-                            </span>
-                          </div>
-                        )}
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
                         <button
                           className="px-2.5 py-1 rounded-full text-xs font-medium bg-black text-white hover:bg-black/90"
                           onClick={(e) => { e.stopPropagation(); router.push(`/trip/${trip.id}`); }}
@@ -340,18 +342,18 @@ export function TripList({ onCreateTrip }: TripListProps) {
                           {t('trip.view')}
                         </button>
                         <button
-                          className="p-2 rounded-full bg-gray-100"
+                          className="p-1.5 sm:p-2 rounded-full bg-gray-100 hover:bg-gray-200"
                           onClick={(e) => { e.stopPropagation(); router.push(`/trip/${trip.id}?edit=1`); }}
                           title={t('trip.edit')}
                         >
-                          <Edit className="w-4 h-4 text-gray-600" />
+                          <Edit className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-600" />
                         </button>
                         <button
-                          className="p-2 rounded-full bg-gray-100"
+                          className="p-1.5 sm:p-2 rounded-full bg-gray-100 hover:bg-gray-200"
                           onClick={(e) => { e.stopPropagation(); handleDelete(trip); }}
                           title={t('trip.delete')}
                         >
-                          <Trash2 className="w-4 h-4 text-red-500" />
+                          <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-red-500" />
                         </button>
                       </div>
                     </div>

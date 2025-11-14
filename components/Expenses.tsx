@@ -86,7 +86,8 @@ export function Expenses({ tripId }: { tripId: string }) {
     try {
       const { error: upErr } = await supabase
         .from('trip_expenses')
-        .update({ title: editTitle, amount_cents: newCents } as any)
+        // @ts-expect-error - Supabase type issue
+        .update({ title: editTitle, amount_cents: newCents })
         .eq('id', e.id);
       if (upErr) throw upErr;
 
@@ -97,7 +98,9 @@ export function Expenses({ tripId }: { tripId: string }) {
         const remainder = newCents - eq * currentSplits.length;
         const updates = currentSplits.map((s, idx) => ({ id: s.id, share_cents: eq + (idx === 0 ? remainder : 0) }));
         // Perform update in batch
-        const { error: up2 } = await supabase.from('trip_expense_splits').upsert(updates as any);
+        const { error: up2 } = await supabase.from('trip_expense_splits')
+          // @ts-expect-error - Supabase type issue
+          .upsert(updates);
         if (up2) throw up2;
       }
 
@@ -257,20 +260,20 @@ export function Expenses({ tripId }: { tripId: string }) {
   if (loading) return <Card className="p-4">{t('common.loading')}</Card>;
 
   return (
-    <Card className="p-4 space-y-3">
-      <div className="font-semibold text-gray-900">{t('expenses.title')}</div>
-      <div className="grid grid-cols-3 gap-2 text-sm">
-        <div className="p-2 rounded-md border">
-          <div className="text-gray-600">{t('expenses.total')}</div>
-          <div className="text-xl font-bold">${totalUsd.toFixed(2)}</div>
+    <Card className="p-3 sm:p-4 space-y-3">
+      <div className="text-sm sm:text-base font-semibold text-gray-900">{t('expenses.title')}</div>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm">
+        <div className="p-2 sm:p-3 rounded-md border">
+          <div className="text-xs sm:text-sm text-gray-600">{t('expenses.total')}</div>
+          <div className="text-lg sm:text-xl font-bold">${totalUsd.toFixed(2)}</div>
         </div>
-        <div className="p-2 rounded-md border">
-          <div className="text-gray-600">{t('expenses.average')}</div>
-          <div className="text-xl font-bold">${perPerson.toFixed(2)}</div>
+        <div className="p-2 sm:p-3 rounded-md border">
+          <div className="text-xs sm:text-sm text-gray-600">{t('expenses.average')}</div>
+          <div className="text-lg sm:text-xl font-bold">${perPerson.toFixed(2)}</div>
         </div>
-        <div className="p-2 rounded-md border">
-          <div className="text-gray-600">{t('expenses.balance')}</div>
-          <div className="text-xl font-bold">
+        <div className="p-2 sm:p-3 rounded-md border">
+          <div className="text-xs sm:text-sm text-gray-600">{t('expenses.balance')}</div>
+          <div className="text-lg sm:text-xl font-bold">
             {(() => {
               const uid = currentUserId || (members[0] && members[0].user_id) || "";
               const b = balances[uid] || { paid: 0, owes: 0 };
@@ -281,20 +284,20 @@ export function Expenses({ tripId }: { tripId: string }) {
         </div>
       </div>
 
-      <div className="flex justify-between items-center">
-        <div className="text-sm text-gray-600">{t('expenses.latest')}</div>
-        <Button size="sm" onClick={() => setOpenForm((o) => !o)}>{openForm ? t('expenses.closeForm') : t('expenses.openForm')}</Button>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 sm:gap-0">
+        <div className="text-xs sm:text-sm text-gray-600">{t('expenses.latest')}</div>
+        <Button size="sm" onClick={() => setOpenForm((o) => !o)} className="text-xs sm:text-sm w-full sm:w-auto">{openForm ? t('expenses.closeForm') : t('expenses.openForm')}</Button>
       </div>
 
       {openForm && (
         <div className="p-3 rounded-md border space-y-2">
           <Input placeholder={t('expenses.form.title')} value={title} onChange={(e) => setTitle(e.target.value)} />
-          <div className="flex gap-2 items-center">
+          <div className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-center">
             <Input
               placeholder={t('expenses.form.amount')}
               value={srcAmount}
               onChange={(e) => setSrcAmount(e.target.value)}
-              className="w-40 rounded-lg border border-gray-300 bg-white/90 shadow-sm focus:border-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900 backdrop-blur"
+              className="w-full sm:w-40 rounded-lg border border-gray-300 bg-white/90 shadow-sm focus:border-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900 backdrop-blur text-sm"
             />
             <div className="relative">
               <select
@@ -316,11 +319,11 @@ export function Expenses({ tripId }: { tripId: string }) {
                 <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.24 4.24a.75.75 0 01-1.06 0L5.25 8.29a.75.75 0 01-.02-1.08z" clipRule="evenodd" />
               </svg>
             </div>
-            <Button size="sm" onClick={convertToUsd} disabled={converting}>{converting ? t('common.loading') : t('expenses.form.convert')}</Button>
-            <div className="text-sm text-gray-700 flex items-center">{usdAmount != null ? `≈ $${usdAmount.toFixed(2)} USD` : null}</div>
+            <Button size="sm" onClick={convertToUsd} disabled={converting} className="text-xs sm:text-sm w-full sm:w-auto">{converting ? t('common.loading') : t('expenses.form.convert')}</Button>
+            <div className="text-xs sm:text-sm text-gray-700 flex items-center justify-center sm:justify-start">{usdAmount != null ? `≈ $${usdAmount.toFixed(2)} USD` : null}</div>
           </div>
-          <div className="flex gap-2 items-center">
-            <div className="text-sm text-gray-600">{t('expenses.form.paidBy')}</div>
+          <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center">
+            <div className="text-xs sm:text-sm text-gray-600">{t('expenses.form.paidBy')}</div>
             <div className="relative">
               <select
                 className="appearance-none rounded-lg border border-gray-300 bg-white/90 px-3 py-2 pr-9 text-sm shadow-sm transition focus:border-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900 backdrop-blur"
@@ -341,55 +344,57 @@ export function Expenses({ tripId }: { tripId: string }) {
               </svg>
             </div>
           </div>
-          <div className="text-sm text-gray-600">{t('expenses.form.participants')}</div>
-          <div className="grid grid-cols-2 gap-1">
+          <div className="text-xs sm:text-sm text-gray-600">{t('expenses.form.participants')}</div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-1">
             {members.map((m) => (
-              <button key={m.user_id} type="button" onClick={() => toggleParticipant(m.user_id)} className={`px-2 py-1 rounded-md border ${selected[m.user_id] ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-900 border-gray-300'}`}>
+              <button key={m.user_id} type="button" onClick={() => toggleParticipant(m.user_id)} className={`px-2 py-1 rounded-md border text-xs sm:text-sm ${selected[m.user_id] ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-900 border-gray-300'}`}>
                 {m.display_name || (m.email ? m.email.split('@')[0] : m.user_id.slice(0,6))}
               </button>
             ))}
           </div>
           <div className="flex gap-2 justify-end">
-            <Button size="sm" onClick={addExpense}>{t('expenses.form.save')}</Button>
+            <Button size="sm" onClick={addExpense} className="text-xs sm:text-sm w-full sm:w-auto">{t('expenses.form.save')}</Button>
           </div>
         </div>
       )}
 
       <div className="space-y-2">
         {expenses.slice(0,10).map((e) => (
-          <div key={e.id} className="text-sm border rounded-md p-2">
+          <div key={e.id} className="text-xs sm:text-sm border rounded-md p-2">
             {editingId === e.id ? (
-              <div className="flex items-center gap-2">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                 <input
-                  className="border rounded px-2 py-1 text-sm flex-1"
+                  className="border rounded px-2 py-1 text-xs sm:text-sm flex-1"
                   value={editTitle}
                   onChange={(ev) => setEditTitle(ev.target.value)}
                 />
                 <input
-                  className="border rounded px-2 py-1 text-sm w-28"
+                  className="border rounded px-2 py-1 text-xs sm:text-sm w-full sm:w-28"
                   value={editAmountUsd}
                   onChange={(ev) => setEditAmountUsd(ev.target.value)}
                 />
-                <Button size="sm" onClick={() => saveEdit(e)}>Save</Button>
-                <Button size="sm" variant="outline" onClick={cancelEdit}>Cancel</Button>
+                <div className="flex gap-2">
+                  <Button size="sm" onClick={() => saveEdit(e)} className="text-xs flex-1 sm:flex-none">Save</Button>
+                  <Button size="sm" variant="outline" onClick={cancelEdit} className="text-xs flex-1 sm:flex-none">Cancel</Button>
+                </div>
               </div>
             ) : (
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="font-medium">{e.title}</div>
-                  <div className="text-gray-600">{t('expenses.paidByUser', { name: nameOf(e.paid_by) })}</div>
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                <div className="flex-1">
+                  <div className="font-medium text-sm sm:text-base">{e.title}</div>
+                  <div className="text-gray-600 text-xs">{t('expenses.paidByUser', { name: nameOf(e.paid_by) })}</div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <div className="font-semibold">${(e.amount_cents/100).toFixed(2)} USD</div>
-                  <Button size="sm" variant="outline" onClick={() => startEdit(e)}>{t('common.edit')}</Button>
-                  <Button size="sm" variant="ghost" onClick={() => deleteExpense(e)}>{t('common.delete')}</Button>
+                <div className="flex items-center gap-1.5 sm:gap-2 w-full sm:w-auto">
+                  <div className="font-semibold text-sm sm:text-base">${(e.amount_cents/100).toFixed(2)} USD</div>
+                  <Button size="sm" variant="outline" onClick={() => startEdit(e)} className="text-xs">{t('common.edit')}</Button>
+                  <Button size="sm" variant="ghost" onClick={() => deleteExpense(e)} className="text-xs">{t('common.delete')}</Button>
                 </div>
               </div>
             )}
           </div>
         ))}
         {expenses.length === 0 && (
-          <div className="text-sm text-gray-500">{t('expenses.none')}</div>
+          <div className="text-xs sm:text-sm text-gray-500">{t('expenses.none')}</div>
         )}
       </div>
     </Card>

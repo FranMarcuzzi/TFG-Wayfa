@@ -113,7 +113,8 @@ export function InvitationsList() {
       // Update invitation status
       const { error: inviteError } = await supabase
         .from('trip_invitations')
-        .update({ status: 'accepted' } as any)
+        // @ts-expect-error - Supabase type issue
+        .update({ status: 'accepted' })
         .eq('id', invitation.id);
 
       if (inviteError) {
@@ -148,7 +149,8 @@ export function InvitationsList() {
     try {
       const { error } = await supabase
         .from('trip_invitations')
-        .update({ status: 'declined' } as any)
+        // @ts-expect-error - Supabase type issue
+        .update({ status: 'declined' })
         .eq('id', invitationId);
 
       if (error) throw error;
