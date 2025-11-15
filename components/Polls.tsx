@@ -297,20 +297,19 @@ export function Polls({ tripId }: PollsProps) {
   };
 
   return (
-    <div className="space-y-3 sm:space-y-4">
+    <div className="space-y-4">
       <div className="flex justify-between items-center">
-        <h3 className="text-sm sm:text-base font-semibold text-gray-900">Polls</h3>
+        <h3 className="font-semibold text-gray-900">Polls</h3>
         {!showCreateForm && (
-          <Button onClick={() => setShowCreateForm(true)} size="sm" variant="outline" className="text-xs sm:text-sm px-2 sm:px-3">
-            <Plus className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
-            <span className="hidden sm:inline">New Poll</span>
-            <span className="sm:hidden">New</span>
+          <Button onClick={() => setShowCreateForm(true)} size="sm" variant="outline">
+            <Plus className="h-4 w-4 mr-2" />
+            New Poll
           </Button>
         )}
       </div>
 
       {showCreateForm && (
-        <Card className="p-3 sm:p-4 space-y-2 sm:space-y-3">
+        <Card className="p-4 space-y-3">
           <Input
             placeholder="Poll question"
             value={newQuestion}

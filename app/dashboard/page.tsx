@@ -49,14 +49,14 @@ export default function DashboardPage() {
         )}
         <NavBar />
 
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8">
-          <div className="flex flex-col sm:flex-row items-start justify-between gap-4 mb-6 sm:mb-8">
-            <div className="flex-1">
-              <Reveal variant="slideUp"><h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-gray-900">{t('dashboard.welcome', { commaName: userName ? `, ${userName}` : '' })}</h1></Reveal>
-              <Reveal variant="fade" delayMs={70}><p className="text-sm sm:text-base text-gray-600 mt-2 sm:mt-3">{t('dashboard.ready')}</p></Reveal>
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="flex items-start justify-between mb-8">
+            <div>
+              <Reveal variant="slideUp"><h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight text-gray-900">{t('dashboard.welcome', { commaName: userName ? `, ${userName}` : '' })}</h1></Reveal>
+              <Reveal variant="fade" delayMs={70}><p className="text-gray-600 mt-3">{t('dashboard.ready')}</p></Reveal>
             </div>
             <Reveal variant="slideIn" delayMs={120}>
-              <Button onClick={() => setShowCreateModal(true)} className="w-full sm:w-auto mt-2 flex items-center justify-center gap-2 shadow-[0_6px_0_rgba(0,0,0,0.2)]">
+              <Button onClick={() => setShowCreateModal(true)} className="mt-2 flex items-center gap-2 shadow-[0_6px_0_rgba(0,0,0,0.2)]">
                 <Plus className="h-4 w-4" />
                 {t('dashboard.create')}
               </Button>

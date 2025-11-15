@@ -131,8 +131,7 @@ export function Itinerary({ tripId }: ItineraryProps) {
             const lat = json?.lat ?? json?.result?.geometry?.location?.lat ?? null;
             const lng = json?.lng ?? json?.result?.geometry?.location?.lng ?? null;
             if (typeof lat === 'number' && typeof lng === 'number') {
-          // @ts-expect-error - Supabase type issue
-              await supabase.from('activities').update({ lat, lng }).eq('id', a.id);
+              await supabase.from('activities').update({ lat, lng } as any).eq('id', a.id);
               saved[d.id] = saved[d.id] || {};
               saved[d.id][a.id] = { lat, lng };
               changed = true;
@@ -158,8 +157,7 @@ export function Itinerary({ tripId }: ItineraryProps) {
               const lat = js?.lat ?? js?.result?.geometry?.location?.lat ?? null;
               const lng = js?.lng ?? js?.result?.geometry?.location?.lng ?? null;
               if (typeof lat === 'number' && typeof lng === 'number') {
-                // @ts-expect-error - Supabase type issue
-                await supabase.from('activities').update({ lat, lng, place_id: pid2 }).eq('id', a.id);
+                await supabase.from('activities').update({ lat, lng, place_id: pid2 } as any).eq('id', a.id);
                 saved[d.id] = saved[d.id] || {};
                 saved[d.id][a.id] = { lat, lng };
                 changed = true;
@@ -866,8 +864,8 @@ export function Itinerary({ tripId }: ItineraryProps) {
 
   return (
     <>
-    <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-4 lg:gap-6">
-      <div className="space-y-4 lg:space-y-6">
+    <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-6">
+      <div className="space-y-6">
         {/* Trip start countdown */}
         <Card className="p-4">
           <div className="flex items-center justify-between mb-2">
@@ -1506,24 +1504,24 @@ export function Itinerary({ tripId }: ItineraryProps) {
     </div>
 
       {/* Floating launchers: Polls (above) and Chat (below) */}
-      <div className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-50 flex flex-col items-end gap-2 sm:gap-3">
+      <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-3">
         <Button
-          className="relative rounded-full shadow-lg h-11 w-11 sm:h-12 sm:w-12 p-0"
+          className="relative rounded-full shadow-lg h-12 w-12 p-0"
           size="icon"
           onClick={() => setIsPollsOpen((v) => !v)}
           aria-label="Open polls"
         >
-          <BarChart3 className="h-4 w-4 sm:h-5 sm:w-5" />
+          <BarChart3 className="h-5 w-5" />
         </Button>
         <Button
-          className="relative rounded-full shadow-lg h-11 w-11 sm:h-12 sm:w-12 p-0"
+          className="relative rounded-full shadow-lg h-12 w-12 p-0"
           size="icon"
           onClick={() => { setIsChatOpen(true); setUnreadCount(0); }}
           aria-label="Open chat"
         >
-          <MessageCircle className="h-4 w-4 sm:h-5 sm:w-5" />
+          <MessageCircle className="h-5 w-5" />
           {unreadCount > 0 && (
-            <span className="absolute -top-0.5 -right-0.5 sm:-top-1 sm:-right-1 bg-red-600 text-white text-[9px] sm:text-[10px] leading-none px-1 sm:px-1.5 py-0.5 rounded-full">
+            <span className="absolute -top-1 -right-1 bg-red-600 text-white text-[10px] leading-none px-1.5 py-0.5 rounded-full">
               {unreadCount}
             </span>
           )}
@@ -1532,11 +1530,11 @@ export function Itinerary({ tripId }: ItineraryProps) {
 
       {/* Compact bottom-right chat box */}
       {isChatOpen && (
-        <div className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-50 w-[calc(100vw-2rem)] sm:w-[340px] md:w-[380px] max-w-[95vw] h-[70vh] sm:h-[65vh] max-h-[560px] flex flex-col">
+        <div className="fixed bottom-6 right-6 z-50 w-[340px] sm:w-[380px] max-w-[95vw] h-[65vh] max-h-[560px] flex flex-col">
           <Chat tripId={tripId} compact />
-          <div className="absolute top-1.5 right-1.5 sm:top-2 sm:right-2">
-            <Button variant="ghost" size="icon" onClick={() => setIsChatOpen(false)} aria-label="Close chat" className="h-7 w-7 sm:h-8 sm:w-8">
-              <X className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+          <div className="absolute top-2 right-2">
+            <Button variant="ghost" size="icon" onClick={() => setIsChatOpen(false)} aria-label="Close chat">
+              <X className="h-4 w-4" />
             </Button>
           </div>
         </div>
@@ -1544,15 +1542,15 @@ export function Itinerary({ tripId }: ItineraryProps) {
 
       {/* Compact bottom-right polls box (stacked a bit higher) */}
       {isPollsOpen && (
-        <div className="fixed bottom-[72px] right-4 sm:bottom-[90px] sm:right-6 z-50 w-[calc(100vw-2rem)] sm:w-[360px] md:w-[420px] max-w-[95vw] max-h-[70vh] overflow-hidden flex flex-col">
+        <div className="fixed bottom-[90px] right-6 z-50 w-[360px] sm:w-[420px] max-w-[95vw] max-h-[70vh] overflow-hidden flex flex-col">
           <Card className="p-0 overflow-hidden w-full h-full">
-            <div className="relative p-2.5 sm:p-3 border-b flex items-center justify-between">
-              <div className="text-sm sm:text-base font-medium text-gray-900">Encuestas</div>
-              <Button variant="ghost" size="icon" onClick={() => setIsPollsOpen(false)} aria-label="Close polls" className="h-7 w-7 sm:h-8 sm:w-8">
-                <X className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            <div className="relative p-3 border-b flex items-center justify-between">
+              <div className="font-medium text-gray-900">Encuestas</div>
+              <Button variant="ghost" size="icon" onClick={() => setIsPollsOpen(false)} aria-label="Close polls">
+                <X className="h-4 w-4" />
               </Button>
             </div>
-            <div className="p-2.5 sm:p-3 overflow-auto" style={{ maxHeight: '60vh' }}>
+            <div className="p-3 overflow-auto" style={{ maxHeight: '60vh' }}>
               <Polls tripId={tripId} />
             </div>
           </Card>
