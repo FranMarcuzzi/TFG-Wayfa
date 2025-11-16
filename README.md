@@ -22,4 +22,5 @@ La aplicación estará disponible en `http://localhost:3000`
 - **Email:** `wayfa@example.com`
 - **Contraseña:** `123456`
 
-### Es neceario recordar que en caso de que se corra en local no estaran configuradas las variables de entorno por segurirdad ya que las mismas se encuentran en el archivo .env.local que no se commita. 
+### Recordatorio
+Es neceario recordar que en caso de que se corra en local no estaran configuradas las variables de entorno por segurirdad ya que las mismas se encuentran en el archivo .env.local que no se commita. 
