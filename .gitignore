@@ -36,3 +36,11 @@ yarn-error.log*
 next-env.d.ts
 
 /.bolt
+
+ARCHITECTURE.md
+TEST_APP.md
+REALTIME_SETUP.md
+GETTING_STARTED.md
+DEPLOYMENT.md
+CHECKLIST.md
+AUTH_TROUBLESHOOTING.md
