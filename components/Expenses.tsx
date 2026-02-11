@@ -86,7 +86,7 @@ export function Expenses({ tripId }: { tripId: string }) {
     try {
       const { error: upErr } = await supabase
         .from('trip_expenses')
-        .update({ title: editTitle, amount_cents: newCents } as any)
+        .update({ title: editTitle, amount_cents: newCents } as Record<string, unknown>)
         .eq('id', e.id);
       if (upErr) throw upErr;
 
