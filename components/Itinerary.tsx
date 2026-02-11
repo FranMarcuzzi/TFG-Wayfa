@@ -135,7 +135,7 @@ export function Itinerary({ tripId }: ItineraryProps) {
             const lat = json?.lat ?? json?.result?.geometry?.location?.lat ?? null;
             const lng = json?.lng ?? json?.result?.geometry?.location?.lng ?? null;
             if (typeof lat === 'number' && typeof lng === 'number') {
-              await supabase.from('activities').update({ lat, lng } as any).eq('id', a.id);
+              await (supabase.from('activities') as any).update({ lat, lng } as any).eq('id', a.id);
               saved[d.id] = saved[d.id] || {};
               saved[d.id][a.id] = { lat, lng };
               changed = true;
@@ -161,7 +161,7 @@ export function Itinerary({ tripId }: ItineraryProps) {
               const lat = js?.lat ?? js?.result?.geometry?.location?.lat ?? null;
               const lng = js?.lng ?? js?.result?.geometry?.location?.lng ?? null;
               if (typeof lat === 'number' && typeof lng === 'number') {
-                await supabase.from('activities').update({ lat, lng, place_id: pid2 } as any).eq('id', a.id);
+                await (supabase.from('activities') as any).update({ lat, lng, place_id: pid2 } as any).eq('id', a.id);
                 saved[d.id] = saved[d.id] || {};
                 saved[d.id][a.id] = { lat, lng };
                 changed = true;
@@ -839,11 +839,11 @@ export function Itinerary({ tripId }: ItineraryProps) {
       } else if (wasHotel && editApplyAll) {
         const ids = getHotelGroupIds(editActivity);
         if (ids.length > 0) {
-          const { error } = await supabase.from('activities').update(payloadBase as any).in('id', ids);
+          const { error } = await (supabase.from('activities') as any).update(payloadBase as any).in('id', ids);
           if (error) throw error;
         }
       } else {
-        const { error } = await supabase.from('activities').update(payloadBase as any).eq('id', editActivity.id);
+        const { error } = await (supabase.from('activities') as any).update(payloadBase as any).eq('id', editActivity.id);
         if (error) throw error;
       }
 
