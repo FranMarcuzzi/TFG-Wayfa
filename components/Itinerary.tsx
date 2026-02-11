@@ -494,8 +494,8 @@ export function Itinerary({ tripId }: ItineraryProps) {
   };
 
   const loadDays = async () => {
-    const { data: daysData } = await supabase
-      .from('days')
+    const { data: daysData } = await (supabase
+      .from('days') as any)
       .select('*')
       .eq('trip_id', tripId)
       .order('day_index');
@@ -817,8 +817,8 @@ export function Itinerary({ tripId }: ItineraryProps) {
               : appendIndex++;
             return { trip_id: tripId, day_index: idx, date: toISODate(d) };
           });
-          const { data: insertedDays, error: insertDayErr } = await supabase
-            .from('days')
+          const { data: insertedDays, error: insertDayErr } = await (supabase
+            .from('days') as any)
             .insert(newDaysPayload as any)
             .select('*');
           if (insertDayErr) throw insertDayErr;
@@ -1512,7 +1512,7 @@ export function Itinerary({ tripId }: ItineraryProps) {
       }
     }
 
-    const { error } = await supabase.from('days').insert({
+    const { error } = await (supabase.from('days') as any).insert({
       trip_id: tripId,
       day_index: nextIndex,
       date: trip?.start_date ? toISODate(addDays(parseDateOnly(trip.start_date)!, nextIndex - 1)) : null,
@@ -1589,8 +1589,8 @@ export function Itinerary({ tripId }: ItineraryProps) {
                 date: toISODate(d),
               };
             });
-            const { data: insertedDays, error: insertDayErr } = await supabase
-              .from('days')
+            const { data: insertedDays, error: insertDayErr } = await (supabase
+              .from('days') as any)
               .insert(newDaysPayload as any)
               .select('*');
             if (insertDayErr) {
@@ -1770,7 +1770,7 @@ export function Itinerary({ tripId }: ItineraryProps) {
   const deleteDay = async (dayId: string) => {
     try {
       await supabase.from('activities').delete().eq('day_id', dayId);
-      await supabase.from('days').delete().eq('id', dayId);
+      await (supabase.from('days') as any).delete().eq('id', dayId);
       await loadDays();
       if (selectedDayId === dayId) {
         const next = days.find((d) => d.id !== dayId)?.id || null;
