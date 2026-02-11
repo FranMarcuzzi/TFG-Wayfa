@@ -9,9 +9,11 @@ import { signIn } from '@/lib/auth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
+import { useI18n } from '@/components/i18n/I18nProvider';
 
 export default function LoginPage() {
   const router = useRouter();
+  const { t } = useI18n();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -26,13 +28,13 @@ export default function LoginPage() {
       const result = await signIn(email, password);
 
       if (result.error) {
-        setError(result.error.message);
+        setError(t('auth.login.error'));
         setLoading(false);
       } else {
         router.push('/dashboard');
       }
     } catch (err) {
-      setError('Failed to sign in. Please try again.');
+      setError(t('auth.login.error'));
       setLoading(false);
     }
   };
@@ -47,7 +49,7 @@ export default function LoginPage() {
       <Card className="w-full max-w-md p-8 space-y-6 relative">
         <div className="text-center">
           <h1 className="text-3xl font-semibold text-gray-900">Wayfa</h1>
-          <p className="mt-2 text-sm text-gray-600">Sign in to your account</p>
+          <p className="mt-2 text-sm text-gray-600">{t('auth.login.subtitle')}</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -59,7 +61,7 @@ export default function LoginPage() {
 
           <div className="space-y-2">
             <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-              Email
+              {t('auth.email')}
             </label>
             <Input
               id="email"
@@ -68,13 +70,13 @@ export default function LoginPage() {
               onChange={(e) => setEmail(e.target.value)}
               required
               disabled={loading}
-              placeholder="you@example.com"
+              placeholder={t('auth.email.placeholder')}
             />
           </div>
 
           <div className="space-y-2">
             <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-              Password
+              {t('auth.password')}
             </label>
             <Input
               id="password"
@@ -83,19 +85,19 @@ export default function LoginPage() {
               onChange={(e) => setPassword(e.target.value)}
               required
               disabled={loading}
-              placeholder="••••••••"
+              placeholder={t('auth.password.placeholder')}
             />
           </div>
 
           <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? 'Signing in…' : 'Sign in'}
+            {loading ? t('auth.login.loading') : t('auth.login.submit')}
           </Button>
         </form>
 
         <p className="text-sm text-center text-gray-600">
-          Don&apos;t have an account?{' '}
+          {t('auth.login.noAccount')}{' '}
           <Link href="/register" className="font-medium text-blue-600 hover:text-blue-500">
-            Sign up
+            {t('auth.login.signup')}
           </Link>
         </p>
       </Card>

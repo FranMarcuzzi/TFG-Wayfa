@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Mail, Check, X } from 'lucide-react';
 import type { Database } from '@/lib/supabase/types';
 import { toast } from '@/hooks/use-toast';
+import { useI18n } from '@/components/i18n/I18nProvider';
 
 interface Invitation {
   id: string;
@@ -22,6 +23,7 @@ interface Invitation {
 
 export function InvitationsList() {
   const router = useRouter();
+  const { t } = useI18n();
   const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
@@ -72,7 +74,7 @@ export function InvitationsList() {
       }
     } catch (error) {
       console.error('Error loading invitations:', error);
-      toast({ variant: 'destructive', title: 'Failed to load invitations' });
+      toast({ variant: 'destructive', title: t('invitations.failedLoad') });
     } finally {
       setLoading(false);
       try { window.dispatchEvent(new CustomEvent('dashboard-section-loaded', { detail: 'invitations' })); } catch {}
@@ -136,11 +138,11 @@ export function InvitationsList() {
       // Redirect to the trip page
       router.push(`/trip/${invitation.trip_id}`);
       router.refresh();
-      toast({ title: 'Invitation accepted', description: 'You joined the trip.' });
+      toast({ title: t('invitations.acceptedTitle'), description: t('invitations.acceptedDesc') });
     } catch (error: any) {
       console.error('Error accepting invitation:', error);
       const message = error?.message || JSON.stringify(error);
-      toast({ variant: 'destructive', title: 'Failed to accept invitation', description: message });
+      toast({ variant: 'destructive', title: t('invitations.acceptFailed'), description: message });
     }
   };
 
@@ -154,10 +156,10 @@ export function InvitationsList() {
       if (error) throw error;
 
       setInvitations(invitations.filter((inv) => inv.id !== invitationId));
-      toast({ title: 'Invitation declined' });
+      toast({ title: t('invitations.declinedTitle') });
     } catch (error) {
       console.error('Error declining invitation:', error);
-      toast({ variant: 'destructive', title: 'Failed to decline invitation' });
+      toast({ variant: 'destructive', title: t('invitations.declineFailed') });
     }
   };
 
@@ -167,12 +169,12 @@ export function InvitationsList() {
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
             <Mail className="w-5 h-5" />
-            Trip Invitations
+            {t('invitations.title')}
           </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="animate-pulse space-y-3">
-            <div className="h-20 bg-gray-200 rounded" />
+            <div className="h-20 bg-muted rounded" />
           </div>
         </CardContent>
       </Card>
@@ -188,7 +190,7 @@ export function InvitationsList() {
       <CardHeader>
         <CardTitle className="text-lg flex items-center gap-2">
           <Mail className="w-5 h-5 text-blue-600" />
-          Trip Invitations
+          {t('invitations.title')}
           <Badge variant="secondary" className="ml-auto">
             {invitations.length}
           </Badge>
@@ -198,14 +200,14 @@ export function InvitationsList() {
         {invitations.map((invitation) => (
           <div
             key={invitation.id}
-            className="bg-white p-4 rounded-lg border border-blue-200 space-y-3"
+            className="bg-card p-4 rounded-lg border border-blue-200 space-y-3"
           >
             <div>
-              <h3 className="font-semibold text-gray-900">
-                {invitation.trip_title || 'Untitled Trip'}
+              <h3 className="font-semibold text-foreground">
+                {invitation.trip_title || t('invitations.untitled')}
               </h3>
               {invitation.trip_destination && (
-                <p className="text-sm text-gray-600">{invitation.trip_destination}</p>
+                <p className="text-sm text-muted-foreground">{invitation.trip_destination}</p>
               )}
             </div>
             <div className="flex gap-2">
@@ -215,7 +217,7 @@ export function InvitationsList() {
                 className="flex-1 gap-2"
               >
                 <Check className="w-4 h-4" />
-                Accept
+                {t('invitations.accept')}
               </Button>
               <Button
                 size="sm"
@@ -224,7 +226,7 @@ export function InvitationsList() {
                 className="flex-1 gap-2 text-red-600 hover:text-red-700 hover:bg-red-50"
               >
                 <X className="w-4 h-4" />
-                Decline
+                {t('invitations.decline')}
               </Button>
             </div>
           </div>

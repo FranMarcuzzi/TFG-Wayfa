@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Send } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from '@/hooks/use-toast';
+import { useI18n } from '@/components/i18n/I18nProvider';
 
 interface Message {
   id: string;
@@ -26,6 +27,7 @@ interface ChatProps {
 }
 
 export function Chat({ tripId, embedded = false, compact = false }: ChatProps) {
+  const { t } = useI18n();
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -97,7 +99,7 @@ export function Chat({ tripId, embedded = false, compact = false }: ChatProps) {
         const messagesWithAuthors = data.map((msg: any) => ({
           ...msg,
           author_name: msg.user_profiles?.display_name || null,
-          author_email: msg.user_profiles?.email || 'Unknown',
+          author_email: msg.user_profiles?.email || t('common.unknown'),
         }));
         setMessages(messagesWithAuthors);
       }
@@ -153,7 +155,7 @@ export function Chat({ tripId, embedded = false, compact = false }: ChatProps) {
               content: msgData.content,
               created_at: msgData.created_at,
               author_name: msgData.user_profiles?.display_name || null,
-              author_email: msgData.user_profiles?.email || 'Unknown',
+              author_email: msgData.user_profiles?.email || t('common.unknown'),
             };
 
             setMessages((prev) => {
@@ -215,7 +217,7 @@ export function Chat({ tripId, embedded = false, compact = false }: ChatProps) {
 
     if (error) {
       console.error('Failed to send message:', error);
-      toast({ variant: 'destructive', title: 'Message not sent', description: error.message || 'Failed to send message' });
+      toast({ variant: 'destructive', title: t('chat.sendFailedTitle'), description: error.message || t('chat.sendFailedDesc') });
       return;
     }
 
@@ -235,34 +237,31 @@ export function Chat({ tripId, embedded = false, compact = false }: ChatProps) {
       <div className="flex flex-col h-full">
         <div className="flex-1 overflow-y-auto p-2 space-y-3">
           {messages.length === 0 ? (
-            <div className="text-center text-gray-500 py-8">
-              No messages yet. Start the conversation!
+            <div className="text-center text-muted-foreground py-8">
+              {t('chat.empty')}
             </div>
           ) : (
             messages.map((message) => (
               <div
                 key={message.id}
-                className={`flex ${
-                  message.author_id === currentUserId ? 'justify-end' : 'justify-start'
-                }`}
+                className={`flex ${message.author_id === currentUserId ? 'justify-end' : 'justify-start'
+                  }`}
               >
                 <div
-                  className={`max-w-[70%] rounded-lg p-3 ${
-                    message.author_id === currentUserId
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-100 text-gray-900'
-                  }`}
+                  className={`max-w-[70%] rounded-lg p-3 ${message.author_id === currentUserId
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-muted text-muted-foreground'
+                    }`}
                 >
                   {message.author_id !== currentUserId && (
-                    <div className="text-xs font-semibold mb-1 text-gray-700">
-                      {message.author_name || message.author_email?.split('@')[0] || 'Unknown'}
+                    <div className="text-xs font-semibold mb-1 text-muted-foreground/80">
+                      {message.author_name || message.author_email?.split('@')[0] || t('common.unknown')}
                     </div>
                   )}
                   <div className="break-words">{message.content}</div>
                   <div
-                    className={`text-xs mt-1 ${
-                      message.author_id === currentUserId ? 'text-blue-100' : 'text-gray-500'
-                    }`}
+                    className={`text-xs mt-1 ${message.author_id === currentUserId ? 'text-primary-foreground/80' : 'text-muted-foreground/80'
+                      }`}
                   >
                     {format(new Date(message.created_at), 'h:mm a')}
                   </div>
@@ -277,7 +276,7 @@ export function Chat({ tripId, embedded = false, compact = false }: ChatProps) {
             <Input
               value={newMessage}
               onChange={(e) => setNewMessage(e.target.value)}
-              placeholder="Type a message..."
+              placeholder={t('chat.placeholder')}
               className="flex-1"
             />
             <Button type="submit" size="icon" disabled={!newMessage.trim()}>
@@ -292,39 +291,36 @@ export function Chat({ tripId, embedded = false, compact = false }: ChatProps) {
   return (
     <Card className={`flex flex-col ${compact ? 'h-full' : 'h-[600px]'}`}>
       <div className="p-4 border-b">
-        <h3 className="font-semibold text-gray-900">Chat</h3>
+        <h3 className="font-semibold text-foreground">{t('chat.title')}</h3>
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
         {messages.length === 0 ? (
-          <div className="text-center text-gray-500 py-8">
-            No messages yet. Start the conversation!
+          <div className="text-center text-muted-foreground py-8">
+            {t('chat.empty')}
           </div>
         ) : (
           messages.map((message) => (
             <div
               key={message.id}
-              className={`flex ${
-                message.author_id === currentUserId ? 'justify-end' : 'justify-start'
-              }`}
+              className={`flex ${message.author_id === currentUserId ? 'justify-end' : 'justify-start'
+                }`}
             >
               <div
-                className={`max-w-[70%] rounded-lg p-3 ${
-                  message.author_id === currentUserId
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-100 text-gray-900'
-                }`}
+                className={`max-w-[70%] rounded-lg p-3 ${message.author_id === currentUserId
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-muted text-muted-foreground'
+                  }`}
               >
                 {message.author_id !== currentUserId && (
-                  <div className="text-xs font-semibold mb-1 text-gray-700">
-                    {message.author_name || message.author_email?.split('@')[0] || 'Unknown'}
+                  <div className="text-xs font-semibold mb-1 text-muted-foreground/80">
+                    {message.author_name || message.author_email?.split('@')[0] || t('common.unknown')}
                   </div>
                 )}
                 <div className="break-words">{message.content}</div>
                 <div
-                  className={`text-xs mt-1 ${
-                    message.author_id === currentUserId ? 'text-blue-100' : 'text-gray-500'
-                  }`}
+                  className={`text-xs mt-1 ${message.author_id === currentUserId ? 'text-primary-foreground/80' : 'text-muted-foreground/80'
+                    }`}
                 >
                   {format(new Date(message.created_at), 'h:mm a')}
                 </div>
@@ -340,7 +336,7 @@ export function Chat({ tripId, embedded = false, compact = false }: ChatProps) {
           <Input
             value={newMessage}
             onChange={(e) => setNewMessage(e.target.value)}
-            placeholder="Type a message..."
+            placeholder={t('chat.placeholder')}
             className="flex-1"
           />
           <Button type="submit" size="icon" disabled={!newMessage.trim()}>

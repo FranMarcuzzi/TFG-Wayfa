@@ -93,7 +93,7 @@ export type Database = {
           place_id: string | null;
           lat: number | null;
           lng: number | null;
-          type: 'food' | 'museum' | 'sightseeing' | 'transport' | 'other' | null;
+          type: 'food' | 'museum' | 'sightseeing' | 'transport' | 'hotel' | 'flight' | 'other' | null;
         };
         Insert: {
           id?: string;
@@ -105,7 +105,7 @@ export type Database = {
           place_id?: string | null;
           lat?: number | null;
           lng?: number | null;
-          type?: 'food' | 'museum' | 'sightseeing' | 'transport' | 'other' | null;
+          type?: 'food' | 'museum' | 'sightseeing' | 'transport' | 'hotel' | 'flight' | 'other' | null;
         };
         Update: {
           id?: string;
@@ -117,7 +117,7 @@ export type Database = {
           place_id?: string | null;
           lat?: number | null;
           lng?: number | null;
-          type?: 'food' | 'museum' | 'sightseeing' | 'transport' | 'other' | null;
+          type?: 'food' | 'museum' | 'sightseeing' | 'transport' | 'hotel' | 'flight' | 'other' | null;
         };
       };
       activity_likes: {

@@ -1,9 +1,11 @@
-"use client";
+'use client';
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Player from 'lottie-react';
 import passportAnim from '@/public/animations/passport.json';
+import { useTheme } from 'next-themes';
 import type { RequirementData } from './RequirementsPanel';
+import { useI18n } from '@/components/i18n/I18nProvider';
 
 // Throttle: max N requests per second
 const RATE_PER_SEC = 12;
@@ -89,7 +91,7 @@ async function tryBulkColor(nationality: string, map: any): Promise<boolean> {
     if (!map || !map.getSource || !map.getLayer('countries-fill')) return false;
     if (!map.isSourceLoaded || !map.isSourceLoaded('countries')) {
       await new Promise<void>((resolve) => {
-        const once = () => { try { map.off('idle', once); } catch {} resolve(); };
+        const once = () => { try { map.off('idle', once); } catch { } resolve(); };
         map.on('idle', once);
       });
     }
@@ -129,7 +131,7 @@ function applyBulk(map: any, json: { green?: string[]; blue?: string[]; yellow?:
     if (map.getLayer('countries-fill')) {
       map.setPaintProperty('countries-fill', 'fill-color', matchExpr);
     }
-  } catch {}
+  } catch { }
 
   // Also set feature-state as a secondary path (not strictly required when using match)
   const setMany = (codes: string[] | undefined, cat: string) => {
@@ -142,7 +144,7 @@ function applyBulk(map: any, json: { green?: string[]; blue?: string[]; yellow?:
           { source: 'countries', sourceLayer: 'country_boundaries', id: iso3 },
           { cat }
         );
-      } catch {}
+      } catch { }
     }
   };
   setMany(g, 'vf');
@@ -162,6 +164,8 @@ export function MapRequirements({ nationality, onCountryClick }: {
   nationality: string;
   onCountryClick: (info: { iso2: string; name?: string; data: RequirementData }) => void;
 }) {
+  const { t } = useI18n();
+  const { resolvedTheme } = useTheme();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<any>(null);
   const [hoverInfo, setHoverInfo] = useState<{ x: number; y: number; iso2: string; name: string; cat?: string } | null>(null);
@@ -169,6 +173,23 @@ export function MapRequirements({ nationality, onCountryClick }: {
   const [mapReady, setMapReady] = useState(false);
   const [animDone, setAnimDone] = useState(false);
   const [animKey, setAnimKey] = useState(0);
+
+  // Update map style when theme changes
+  useEffect(() => {
+    const map = mapRef.current;
+    if (map) {
+      map.setStyle(resolvedTheme === 'dark' ? 'mapbox://styles/mapbox/dark-v11' : 'mapbox://styles/mapbox/light-v11');
+    }
+  }, [resolvedTheme]);
+
+  const labelFromCat = (cat?: string) => {
+    switch (cat) {
+      case 'vf': return t('travel.requirements.category.visaFree');
+      case 'ev': return t('travel.requirements.category.evisa');
+      case 'v': return t('travel.requirements.category.visa');
+      default: return t('travel.requirements.category.unknown');
+    }
+  };
 
   // Build paint expression once
   const fillPaint = useMemo(() => (
@@ -194,17 +215,17 @@ export function MapRequirements({ nationality, onCountryClick }: {
       if (!containerRef.current || !mapboxgl.accessToken) return;
 
       // Ensure container is empty before initializing the map (avoids Mapbox warning)
-      try { if (containerRef.current) containerRef.current.innerHTML = ''; } catch {}
+      try { if (containerRef.current) containerRef.current.innerHTML = ''; } catch { }
 
       const map = new mapboxgl.Map({
         container: containerRef.current,
-        style: 'mapbox://styles/mapbox/light-v11',
+        style: resolvedTheme === 'dark' ? 'mapbox://styles/mapbox/dark-v11' : 'mapbox://styles/mapbox/light-v11',
         center: [0, 20],
         zoom: 1.2,
         attributionControl: false,
       });
       mapRef.current = map;
-      try { (globalThis as any).__WAYFA_MAP__ = map; } catch {}
+      try { (globalThis as any).__WAYFA_MAP__ = map; } catch { }
 
       map.addControl(new mapboxgl.NavigationControl({ visualizePitch: true }), 'top-right');
 
@@ -280,7 +301,7 @@ export function MapRequirements({ nationality, onCountryClick }: {
         if (!iso2) console.log('[VisaMap] WARN click: no ISO2 on feature', { props: f.properties });
         const name: string = f.properties?.name_en || f.properties?.name || '';
         console.log('[VisaMap] CLICK check', { passport: nationality, destination: iso2 });
-        getReq(nationality, iso2).then((data) => {
+        getReq(nationality, iso2, t('travel.requirements.unavailable')).then((data) => {
           console.log('[VisaMap] CHECK result', { destination: iso2, category: data?.category, summary: data?.summary });
           onCountryClick({ iso2, name, data });
         });
@@ -318,7 +339,7 @@ export function MapRequirements({ nationality, onCountryClick }: {
             const batch = Array.from(q.set).slice(0, RATE_PER_SEC);
             for (const iso of batch) {
               q.set.delete(iso);
-              const data = await getReq(nationality, iso);
+              const data = await getReq(nationality, iso, t('travel.requirements.unavailable'));
               if (mapRef.current) paintISO(iso, data);
             }
             if (q.set.size === 0) {
@@ -350,11 +371,11 @@ export function MapRequirements({ nationality, onCountryClick }: {
       if (queueRef.current?.timer) clearInterval(queueRef.current.timer);
       const map = mapRef.current;
       if (map) {
-        try { map.remove(); } catch {}
+        try { map.remove(); } catch { }
         mapRef.current = null;
       }
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // On nationality change: reset feature-state and try bulk coloring; fallback to progressive
@@ -369,7 +390,7 @@ export function MapRequirements({ nationality, onCountryClick }: {
       if (!map.getLayer('countries-fill')) return;
       if (!map.isSourceLoaded || !map.isSourceLoaded('countries')) {
         await new Promise<void>((resolve) => {
-          const once = () => { try { map.off('idle', once); } catch {} resolve(); };
+          const once = () => { try { map.off('idle', once); } catch { } resolve(); };
           map.on('idle', once);
         });
       }
@@ -378,7 +399,7 @@ export function MapRequirements({ nationality, onCountryClick }: {
         try {
           const center = map.getCenter();
           map.easeTo({ center });
-        } catch {}
+        } catch { }
       }
       setMapReady(true);
     };
@@ -389,7 +410,7 @@ export function MapRequirements({ nationality, onCountryClick }: {
     <div className="relative h-full w-full">
       <div ref={containerRef} className="absolute inset-0" />
       {(!mapReady || !animDone) && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-white/80 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
           <Player
             key={animKey}
             autoplay
@@ -402,27 +423,18 @@ export function MapRequirements({ nationality, onCountryClick }: {
       )}
       {hoverInfo && (
         <div
-          className="pointer-events-none absolute z-30 rounded-md border border-gray-200 bg-white px-2 py-1 text-xs text-gray-900 shadow"
+          className="pointer-events-none absolute z-30 rounded-md border border-border bg-card px-2 py-1 text-xs text-foreground shadow"
           style={{ left: hoverInfo.x + 8, top: hoverInfo.y + 8 }}
         >
           <div className="font-medium">{hoverInfo.name} ({hoverInfo.iso2})</div>
-          <div className="text-gray-600">{labelFromCat(hoverInfo.cat)}</div>
+          <div className="text-muted-foreground">{labelFromCat(hoverInfo.cat)}</div>
         </div>
       )}
     </div>
   );
 }
 
-function labelFromCat(cat?: string) {
-  switch (cat) {
-    case 'vf': return 'Visa-free';
-    case 'ev': return 'eVisa / eTA';
-    case 'v': return 'Visa required';
-    default: return 'Unknown';
-  }
-}
-
-async function getReq(nationality: string, destination: string): Promise<RequirementData> {
+async function getReq(nationality: string, destination: string, fallbackSummary: string): Promise<RequirementData> {
   const key = `${nationality}:${destination}`;
   if (clientCache.has(key)) return clientCache.get(key)!;
   try {
@@ -432,11 +444,11 @@ async function getReq(nationality: string, destination: string): Promise<Require
     if (json?.debug) {
       console.log('[VisaMap] CHECK raw (v2/visa/check)', json.raw);
     }
-    const norm: RequirementData = json && typeof json === 'object' && 'category' in json ? json : { category: 'unknown', summary: 'Unavailable', details: [], links: [] };
+    const norm: RequirementData = json && typeof json === 'object' && 'category' in json ? json : { category: 'unknown', summary: fallbackSummary, details: [], links: [] };
     clientCache.set(key, norm);
     return norm;
   } catch {
-    const fallback: RequirementData = { category: 'unknown', summary: 'Unavailable', details: [], links: [] };
+    const fallback: RequirementData = { category: 'unknown', summary: fallbackSummary, details: [], links: [] };
     clientCache.set(key, fallback);
     return fallback;
   }
@@ -457,5 +469,5 @@ function resetAllStates(map: any) {
       if (!iso3) return;
       map.setFeatureState({ source: 'countries', sourceLayer: 'country_boundaries', id: iso3 }, { cat: 'un' });
     });
-  } catch {}
+  } catch { }
 }

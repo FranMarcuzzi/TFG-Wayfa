@@ -97,10 +97,10 @@ export default function ProfilePage() {
   if (loading) {
     return (
       <AuthGuard>
-        <div className="min-h-screen bg-gray-50">
+        <div className="min-h-screen bg-background">
           <NavBar />
           <main className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-            <div className="text-gray-600">{t('profile.loading')}</div>
+            <div className="text-muted-foreground">{t('profile.loading')}</div>
           </main>
         </div>
       </AuthGuard>
@@ -109,11 +109,11 @@ export default function ProfilePage() {
 
   return (
     <AuthGuard>
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-background">
         <NavBar />
         <main className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="flex justify-end mb-4">
-            <Link href="/dashboard" className="inline-flex items-center px-4 py-2 rounded-md bg-black text-white shadow-[0_6px_0_rgba(0,0,0,0.2)]">
+            <Link href="/dashboard" className="inline-flex items-center px-4 py-2 rounded-md bg-primary text-primary-foreground shadow-[0_6px_0_rgba(0,0,0,0.2)]">
               {t('profile.back')}
             </Link>
           </div>
@@ -124,8 +124,8 @@ export default function ProfilePage() {
                 {initials(displayName || email)}
               </AvatarFallback>
             </Avatar>
-            <h1 className="mt-4 text-2xl font-bold text-gray-900">{displayName || t('profile.subtitle')}</h1>
-            <p className="text-gray-600">{email}</p>
+            <h1 className="mt-4 text-2xl font-bold text-foreground">{displayName || t('profile.subtitle')}</h1>
+            <p className="text-muted-foreground">{email}</p>
             <Button onClick={() => setEdit(true)} variant="secondary" className="mt-3" disabled={edit}>
               {t('profile.edit')}
             </Button>
@@ -135,10 +135,10 @@ export default function ProfilePage() {
             <div className="divide-y">
               <div className="flex items-center justify-between p-4">
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center">👤</div>
+                  <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">👤</div>
                   <div>
-                    <div className="font-medium text-gray-900">{t('profile.title')}</div>
-                    <div className="text-sm text-gray-500">{t('profile.subtitle')}</div>
+                    <div className="font-medium text-foreground">{t('profile.title')}</div>
+                    <div className="text-sm text-muted-foreground">{t('profile.subtitle')}</div>
                   </div>
                 </div>
                 <div className="w-1/2 max-w-sm">
@@ -153,18 +153,18 @@ export default function ProfilePage() {
 
               <div className="flex items-center justify-between p-4">
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center">🌐</div>
+                  <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">🌐</div>
                   <div>
-                    <div className="font-medium text-gray-900">{t('profile.language')}</div>
-                    <div className="text-sm text-gray-500">{t('profile.language.sub')}</div>
+                    <div className="font-medium text-foreground">{t('profile.language')}</div>
+                    <div className="text-sm text-muted-foreground">{t('profile.language.sub')}</div>
                   </div>
                 </div>
-                <div className="text-sm text-gray-600">
+                <div className="text-sm text-muted-foreground">
                   {edit ? (
                     <select
                       value={language}
                       onChange={(e) => setLanguage(e.target.value)}
-                      className="border rounded-md px-2 py-1 bg-white"
+                      className="border rounded-md px-2 py-1 bg-card"
                     >
                       <option value="en">{t('profile.lang.english')}</option>
                       <option value="es">{t('profile.lang.spanish')}</option>
@@ -174,30 +174,17 @@ export default function ProfilePage() {
                   )}
                 </div>
               </div>
-
-              <div className="flex items-center justify-between p-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center">🌙</div>
-                  <div>
-                    <div className="font-medium text-gray-900">Appearance</div>
-                    <div className="text-sm text-gray-500">Coming soon</div>
-                  </div>
-                </div>
-                <div>
-                  <input type="checkbox" disabled className="w-10 h-5" />
-                </div>
-              </div>
             </div>
           </Card>
 
           <div className="flex justify-end gap-3 mt-4">
             <Button variant="outline" onClick={() => setEdit(false)} disabled={!edit}>{t('profile.cancel')}</Button>
-            <Button onClick={saveProfile} disabled={!edit || saving}>{saving ? 'Saving...' : t('profile.save')}</Button>
+            <Button onClick={saveProfile} disabled={!edit || saving}>{saving ? t('profile.saving') : t('profile.save')}</Button>
           </div>
 
           <div className="mt-8">
             <Button variant="destructive" className="w-full" onClick={logout}>{t('profile.logout')}</Button>
-            <div className="text-center text-xs text-gray-500 mt-2">Delete account</div>
+            <div className="text-center text-xs text-muted-foreground mt-2">{t('profile.deleteAccount')}</div>
           </div>
         </main>
       </div>

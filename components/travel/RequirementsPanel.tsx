@@ -1,6 +1,7 @@
 "use client";
 
 import React from 'react';
+import { useI18n } from '@/components/i18n/I18nProvider';
 
 export type RequirementData = {
   category: 'visa-free' | 'evisa' | 'visa' | 'unknown';
@@ -16,34 +17,57 @@ export function RequirementsPanel({ open, onClose, countryName, iso2, data }: {
   iso2?: string;
   data: RequirementData;
 }) {
+  const { t } = useI18n();
+  const categoryLabel = (cat?: RequirementData extends null ? never : NonNullable<RequirementData>['category']) => {
+    switch (cat) {
+      case 'visa-free':
+        return t('travel.requirements.category.visaFree');
+      case 'evisa':
+        return t('travel.requirements.category.evisa');
+      case 'visa':
+        return t('travel.requirements.category.visa');
+      default:
+        return t('travel.requirements.category.unknown');
+    }
+  };
+  const normalizeSummary = (summary?: string | null) => {
+    const s = (summary || '').trim();
+    if (!s) return t('travel.requirements.unavailable');
+    const lowered = s.toLowerCase();
+    if (lowered === 'unknown' || lowered === 'no data' || lowered === 'unavailable') {
+      return t('travel.requirements.unavailable');
+    }
+    return s;
+  };
+
   return (
-    <div className={`fixed inset-y-0 right-0 z-40 w-full max-w-md transform bg-white shadow-xl transition-transform duration-300 ${open ? 'translate-x-0' : 'translate-x-full'}`}>
-      <div className="flex h-12 items-center justify-between border-b border-gray-200 px-4">
-        <div className="text-sm font-medium text-gray-900">{countryName || 'Destination'}{iso2 ? ` (${iso2})` : ''}</div>
-        <button className="text-sm text-gray-600 hover:text-gray-900" onClick={onClose}>Close</button>
+    <div className={`fixed inset-y-0 right-0 z-40 w-full max-w-md transform bg-card shadow-xl transition-transform duration-300 ${open ? 'translate-x-0' : 'translate-x-full'}`}>
+      <div className="flex h-12 items-center justify-between border-b border-border px-4">
+        <div className="text-sm font-medium text-foreground">{countryName || t('travel.requirements.destination')}{iso2 ? ` (${iso2})` : ''}</div>
+        <button className="text-sm text-muted-foreground hover:text-foreground" onClick={onClose}>{t('travel.requirements.close')}</button>
       </div>
       <div className="h-[calc(100%-3rem)] overflow-auto p-4 space-y-4">
         {!data && (
-          <div className="text-sm text-gray-600">Loading…</div>
+          <div className="text-sm text-muted-foreground">{t('travel.requirements.loading')}</div>
         )}
         {data && (
           <>
             <div className="text-sm">
-              <div className="text-gray-500">Category</div>
-              <div className={`font-medium ${data.category === 'visa-free' ? 'text-green-600' : data.category === 'evisa' ? 'text-amber-600' : data.category === 'visa' ? 'text-red-600' : 'text-gray-600'}`}>{data.category}</div>
+              <div className="text-muted-foreground">{t('travel.requirements.category')}</div>
+              <div className={`font-medium ${data.category === 'visa-free' ? 'text-green-600' : data.category === 'evisa' ? 'text-amber-600' : data.category === 'visa' ? 'text-red-600' : 'text-muted-foreground'}`}>{categoryLabel(data.category)}</div>
             </div>
             <div className="text-sm">
-              <div className="text-gray-500">Summary</div>
-              <div className="text-gray-900">{data.summary || '—'}</div>
+              <div className="text-muted-foreground">{t('travel.requirements.summary')}</div>
+              <div className="text-foreground">{normalizeSummary(data.summary)}</div>
             </div>
             {data.details?.length ? (
               <div className="text-sm">
-                <div className="text-gray-500 mb-1">Details</div>
+                <div className="text-muted-foreground mb-1">{t('travel.requirements.details')}</div>
                 <div className="space-y-2">
                   {data.details.map((d, i) => (
-                    <div key={i} className="rounded border border-gray-200 p-2">
-                      <div className="font-medium text-gray-900">{d.label}</div>
-                      <div className="text-gray-700 whitespace-pre-wrap">{d.value}</div>
+                    <div key={i} className="rounded border border-border p-2">
+                      <div className="font-medium text-foreground">{d.label}</div>
+                      <div className="text-muted-foreground whitespace-pre-wrap">{d.value}</div>
                     </div>
                   ))}
                 </div>
@@ -51,7 +75,7 @@ export function RequirementsPanel({ open, onClose, countryName, iso2, data }: {
             ) : null}
             {data.links?.length ? (
               <div className="text-sm">
-                <div className="text-gray-500 mb-1">Links</div>
+                <div className="text-muted-foreground mb-1">{t('travel.requirements.links')}</div>
                 <ul className="list-disc pl-5 space-y-1">
                   {data.links.map((l, i) => (
                     <li key={i}>

@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase/client';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { useI18n } from '@/components/i18n/I18nProvider';
 
 interface CreateTripModalProps {
   open: boolean;
@@ -14,6 +15,7 @@ interface CreateTripModalProps {
 
 export function CreateTripModal({ open, onOpenChange }: CreateTripModalProps) {
   const router = useRouter();
+  const { t } = useI18n();
   const [title, setTitle] = useState('');
   const [destination, setDestination] = useState('');
   const [destQuery, setDestQuery] = useState('');
@@ -47,7 +49,7 @@ export function CreateTripModal({ open, onOpenChange }: CreateTripModalProps) {
       });
 
       if (!session || !session.access_token) {
-        setError('Not authenticated - please log in again');
+        setError(t('trip.create.auth'));
         setLoading(false);
         router.push('/login');
         return;
@@ -56,7 +58,7 @@ export function CreateTripModal({ open, onOpenChange }: CreateTripModalProps) {
       const { data: { user }, error: userError } = await supabase.auth.getUser();
 
       if (!user) {
-        setError('Not authenticated - please log in again');
+        setError(t('trip.create.auth'));
         setLoading(false);
         router.push('/login');
         return;
@@ -87,7 +89,7 @@ export function CreateTripModal({ open, onOpenChange }: CreateTripModalProps) {
 
       if (insertError) {
         console.error('Insert error:', insertError);
-        setError(`Failed to create trip: ${insertError.message}`);
+        setError(`${t('trip.create.failed')}: ${insertError.message}`);
         setLoading(false);
       } else if (data) {
         const created = data as { id: string };
@@ -112,7 +114,7 @@ export function CreateTripModal({ open, onOpenChange }: CreateTripModalProps) {
       }
     } catch (err) {
       console.error('Unexpected error:', err);
-      setError('An unexpected error occurred');
+      setError(t('common.unexpected'));
       setLoading(false);
     }
   };
@@ -147,7 +149,7 @@ export function CreateTripModal({ open, onOpenChange }: CreateTripModalProps) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Create New Trip</DialogTitle>
+          <DialogTitle>{t('trip.create.title')}</DialogTitle>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -158,8 +160,8 @@ export function CreateTripModal({ open, onOpenChange }: CreateTripModalProps) {
           )}
 
           <div className="space-y-2">
-            <label htmlFor="title" className="block text-sm font-medium text-gray-700">
-              Trip Title *
+            <label htmlFor="title" className="block text-sm font-medium text-muted-foreground">
+              {t('trip.create.titleLabel')}
             </label>
             <Input
               id="title"
@@ -168,13 +170,13 @@ export function CreateTripModal({ open, onOpenChange }: CreateTripModalProps) {
               onChange={(e) => setTitle(e.target.value)}
               required
               disabled={loading}
-              placeholder="Rome Group Trip"
+              placeholder={t('trip.create.titlePlaceholder')}
             />
           </div>
 
           <div className="space-y-2 relative">
-            <label htmlFor="destination" className="block text-sm font-medium text-gray-700">
-              Destination
+            <label htmlFor="destination" className="block text-sm font-medium text-muted-foreground">
+              {t('trip.create.destination')}
             </label>
             <Input
               id="destination"
@@ -182,16 +184,16 @@ export function CreateTripModal({ open, onOpenChange }: CreateTripModalProps) {
               value={destQuery}
               onChange={(e) => setDestQuery(e.target.value)}
               disabled={loading}
-              placeholder="Rome, Italy"
+              placeholder={t('trip.create.destinationPlaceholder')}
               autoComplete="off"
             />
             {destQuery && destPreds.length > 0 && (
-              <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-md shadow-sm max-h-56 overflow-auto">
+              <div className="absolute z-10 mt-1 w-full bg-card border border-border rounded-md shadow-sm max-h-56 overflow-auto">
                 {destPreds.map((p) => (
                   <button
                     type="button"
                     key={p.place_id}
-                    className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-muted/30"
                     onClick={async () => {
                       setDestination(p.description);
                       setDestQuery(p.description);
@@ -217,14 +219,14 @@ export function CreateTripModal({ open, onOpenChange }: CreateTripModalProps) {
               </div>
             )}
             {destLoading && (
-              <div className="text-xs text-gray-500">Searching...</div>
+              <div className="text-xs text-muted-foreground">{t('common.searching')}</div>
             )}
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <label htmlFor="startDate" className="block text-sm font-medium text-gray-700">
-                Start Date
+              <label htmlFor="startDate" className="block text-sm font-medium text-muted-foreground">
+                {t('trip.create.startDate')}
               </label>
               <Input
                 id="startDate"
@@ -236,8 +238,8 @@ export function CreateTripModal({ open, onOpenChange }: CreateTripModalProps) {
             </div>
 
             <div className="space-y-2">
-              <label htmlFor="endDate" className="block text-sm font-medium text-gray-700">
-                End Date
+              <label htmlFor="endDate" className="block text-sm font-medium text-muted-foreground">
+                {t('trip.create.endDate')}
               </label>
               <Input
                 id="endDate"
@@ -250,8 +252,8 @@ export function CreateTripModal({ open, onOpenChange }: CreateTripModalProps) {
           </div>
 
           <div className="space-y-2">
-            <label htmlFor="cover" className="block text-sm font-medium text-gray-700">
-              Cover image URL
+            <label htmlFor="cover" className="block text-sm font-medium text-muted-foreground">
+              {t('trip.create.cover')}
             </label>
             <Input
               id="cover"
@@ -259,21 +261,21 @@ export function CreateTripModal({ open, onOpenChange }: CreateTripModalProps) {
               value={coverUrl}
               onChange={(e) => setCoverUrl(e.target.value)}
               disabled={loading}
-              placeholder="https://..."
+              placeholder={t('trip.create.coverPlaceholder')}
             />
             {coverUrl && (
               <div className="mt-2 flex items-center gap-3">
-                <div className="w-28 h-16 rounded-lg overflow-hidden bg-gray-200">
+                <div className="w-28 h-16 rounded-lg overflow-hidden bg-muted">
                   <img src={coverUrl} alt="Cover preview" className="w-full h-full object-cover" />
                 </div>
-                <div className="text-sm text-gray-600">Preview</div>
+                <div className="text-sm text-muted-foreground">{t('trip.create.preview')}</div>
               </div>
             )}
           </div>
 
           <div className="space-y-2">
-            <label htmlFor="description" className="block text-sm font-medium text-gray-700">
-              Description
+            <label htmlFor="description" className="block text-sm font-medium text-muted-foreground">
+              {t('trip.create.description')}
             </label>
             <textarea
               id="description"
@@ -281,16 +283,16 @@ export function CreateTripModal({ open, onOpenChange }: CreateTripModalProps) {
               onChange={(e) => setDescription(e.target.value)}
               disabled={loading}
               rows={4}
-              placeholder="A collaborative trip to explore the ancient wonders of Rome..."
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900/20"
+              placeholder={t('trip.create.descriptionPlaceholder')}
+              className="w-full rounded-md border border-border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900/20"
             />
           </div>
 
           <div className="pt-2">
-            <h3 className="text-sm font-semibold text-gray-900 mb-2">Invite participants</h3>
+            <h3 className="text-sm font-semibold text-foreground mb-2">{t('trip.create.inviteTitle')}</h3>
             <div className="flex gap-2">
               <Input
-                placeholder="Enter email addresses"
+                placeholder={t('trip.create.invitePlaceholder')}
                 value={inviteInput}
                 onChange={(e) => setInviteInput(e.target.value)}
                 disabled={loading}
@@ -306,17 +308,17 @@ export function CreateTripModal({ open, onOpenChange }: CreateTripModalProps) {
                 }}
                 disabled={loading}
               >
-                Add
+                {t('common.add')}
               </Button>
             </div>
             {invitees.length > 0 && (
               <div className="mt-2 flex flex-wrap gap-2">
                 {invitees.map((email) => (
-                  <span key={email} className="inline-flex items-center gap-2 text-sm px-2 py-1 rounded-full bg-gray-100 text-gray-800">
+                  <span key={email} className="inline-flex items-center gap-2 text-sm px-2 py-1 rounded-full bg-muted text-foreground">
                     {email}
                     <button
                       type="button"
-                      className="text-gray-500 hover:text-gray-700"
+                      className="text-muted-foreground hover:text-muted-foreground"
                       onClick={() => setInvitees(invitees.filter((e) => e !== email))}
                     >
                       ×
@@ -334,10 +336,10 @@ export function CreateTripModal({ open, onOpenChange }: CreateTripModalProps) {
               onClick={() => onOpenChange(false)}
               disabled={loading}
             >
-              Cancel
+              {t('common.cancel')}
             </Button>
             <Button type="submit" disabled={loading}>
-              {loading ? 'Creating...' : 'Create Trip'}
+              {loading ? t('trip.create.loading') : t('trip.create.submit')}
             </Button>
           </div>
         </form>

@@ -13,12 +13,9 @@ CREATE TABLE IF NOT EXISTS public.activity_likes (
   created_at TIMESTAMPTZ DEFAULT now(),
   PRIMARY KEY (activity_id, user_id)
 );
-
 CREATE INDEX IF NOT EXISTS idx_activity_likes_activity ON public.activity_likes(activity_id);
 CREATE INDEX IF NOT EXISTS idx_activity_likes_user ON public.activity_likes(user_id);
-
 ALTER TABLE public.activity_likes DISABLE ROW LEVEL SECURITY;
-
 -- activity_comments
 CREATE TABLE IF NOT EXISTS public.activity_comments (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -27,12 +24,9 @@ CREATE TABLE IF NOT EXISTS public.activity_comments (
   content TEXT NOT NULL,
   created_at TIMESTAMPTZ DEFAULT now()
 );
-
 CREATE INDEX IF NOT EXISTS idx_activity_comments_activity ON public.activity_comments(activity_id);
 CREATE INDEX IF NOT EXISTS idx_activity_comments_user ON public.activity_comments(user_id);
 CREATE INDEX IF NOT EXISTS idx_activity_comments_created_at ON public.activity_comments(created_at);
-
 ALTER TABLE public.activity_comments DISABLE ROW LEVEL SECURITY;
-
 COMMENT ON TABLE public.activity_likes IS 'Per-user likes on activities. RLS disabled in this project.';
 COMMENT ON TABLE public.activity_comments IS 'Comments on activities. RLS disabled in this project.';

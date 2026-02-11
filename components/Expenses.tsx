@@ -101,11 +101,11 @@ export function Expenses({ tripId }: { tripId: string }) {
         if (up2) throw up2;
       }
 
-      toast({ title: 'Expense updated' });
+      toast({ title: t('expenses.updated') });
       await loadExpenses();
       cancelEdit();
     } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Update failed', description: err?.message || 'Error updating expense' });
+      toast({ variant: 'destructive', title: t('expenses.updateFailed'), description: err?.message || t('expenses.updateFailed') });
     }
   };
 
@@ -115,10 +115,10 @@ export function Expenses({ tripId }: { tripId: string }) {
       await supabase.from('trip_expense_splits').delete().eq('expense_id', e.id);
       const { error: delErr } = await supabase.from('trip_expenses').delete().eq('id', e.id);
       if (delErr) throw delErr;
-      toast({ title: 'Expense deleted' });
+      toast({ title: t('expenses.deleted') });
       await loadExpenses();
     } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Delete failed', description: err?.message || 'Error deleting expense' });
+      toast({ variant: 'destructive', title: t('expenses.deleteFailed'), description: err?.message || t('expenses.deleteFailed') });
     }
   };
 
@@ -176,7 +176,7 @@ export function Expenses({ tripId }: { tripId: string }) {
   }, [members, totalUsd]);
   const nameOf = (userId: string) => {
     const m = members.find((mm) => mm.user_id === userId);
-    return m?.display_name || (m?.email ? m.email.split('@')[0] : userId.slice(0,6));
+    return m?.display_name || (m?.email ? m.email.split('@')[0] : userId.slice(0, 6));
   };
 
   const balances = useMemo(() => {
@@ -202,12 +202,12 @@ export function Expenses({ tripId }: { tripId: string }) {
       setConverting(true);
       const res = await fetch(`/api/exchange/convert?from=${encodeURIComponent(srcCurrency)}&to=USD&amount=${encodeURIComponent(String(amt))}`);
       const json = await res.json();
-      if (!res.ok || json.error) throw new Error(json.error || "FX error");
+      if (!res.ok || json.error) throw new Error(json.error || t('expenses.fxError'));
       const out = typeof json.result === "number" ? json.result : 0;
       setUsdAmount(Math.round(out * 100) / 100);
     } catch (e) {
-      const msg = (e as any)?.message || "FX failed";
-      toast({ variant: 'destructive', title: 'Conversion failed', description: msg });
+      const msg = (e as any)?.message || t('expenses.fxError');
+      toast({ variant: 'destructive', title: t('expenses.convertFailedTitle'), description: msg });
     } finally {
       setConverting(false);
     }
@@ -232,7 +232,7 @@ export function Expenses({ tripId }: { tripId: string }) {
       .select("*")
       .single();
     if (error) {
-      toast({ variant: 'destructive', title: 'Expense error', description: error.message });
+      toast({ variant: 'destructive', title: t('expenses.expenseErrorTitle'), description: error.message });
       return;
     }
 
@@ -243,7 +243,7 @@ export function Expenses({ tripId }: { tripId: string }) {
     }));
     const { error: e2 } = await supabase.from("trip_expense_splits").insert(rows as any);
     if (e2) {
-      toast({ variant: 'destructive', title: 'Split error', description: e2.message });
+      toast({ variant: 'destructive', title: t('expenses.splitErrorTitle'), description: e2.message });
       return;
     }
 
@@ -258,18 +258,18 @@ export function Expenses({ tripId }: { tripId: string }) {
 
   return (
     <Card className="p-4 space-y-3">
-      <div className="font-semibold text-gray-900">{t('expenses.title')}</div>
+      <div className="font-semibold text-foreground">{t('expenses.title')}</div>
       <div className="grid grid-cols-3 gap-2 text-sm">
         <div className="p-2 rounded-md border">
-          <div className="text-gray-600">{t('expenses.total')}</div>
+          <div className="text-muted-foreground">{t('expenses.total')}</div>
           <div className="text-xl font-bold">${totalUsd.toFixed(2)}</div>
         </div>
         <div className="p-2 rounded-md border">
-          <div className="text-gray-600">{t('expenses.average')}</div>
+          <div className="text-muted-foreground">{t('expenses.average')}</div>
           <div className="text-xl font-bold">${perPerson.toFixed(2)}</div>
         </div>
         <div className="p-2 rounded-md border">
-          <div className="text-gray-600">{t('expenses.balance')}</div>
+          <div className="text-muted-foreground">{t('expenses.balance')}</div>
           <div className="text-xl font-bold">
             {(() => {
               const uid = currentUserId || (members[0] && members[0].user_id) || "";
@@ -282,7 +282,7 @@ export function Expenses({ tripId }: { tripId: string }) {
       </div>
 
       <div className="flex justify-between items-center">
-        <div className="text-sm text-gray-600">{t('expenses.latest')}</div>
+        <div className="text-sm text-muted-foreground">{t('expenses.latest')}</div>
         <Button size="sm" onClick={() => setOpenForm((o) => !o)}>{openForm ? t('expenses.closeForm') : t('expenses.openForm')}</Button>
       </div>
 
@@ -294,11 +294,11 @@ export function Expenses({ tripId }: { tripId: string }) {
               placeholder={t('expenses.form.amount')}
               value={srcAmount}
               onChange={(e) => setSrcAmount(e.target.value)}
-              className="w-40 rounded-lg border border-gray-300 bg-white/90 shadow-sm focus:border-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900 backdrop-blur"
+              className="w-40 rounded-lg border border-input bg-background/90 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary backdrop-blur"
             />
             <div className="relative">
               <select
-                className="appearance-none rounded-lg border border-gray-300 bg-white/90 px-3 py-2 pr-9 text-sm shadow-sm transition focus:border-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900 backdrop-blur"
+                className="appearance-none rounded-lg border border-input bg-background/90 px-3 py-2 pr-9 text-sm shadow-sm transition focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary backdrop-blur"
                 value={srcCurrency}
                 onChange={(e) => setSrcCurrency(e.target.value)}
               >
@@ -308,7 +308,7 @@ export function Expenses({ tripId }: { tripId: string }) {
                 <option value="BRL">BRL</option>
               </select>
               <svg
-                className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500"
+                className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
                 viewBox="0 0 20 20"
                 fill="currentColor"
                 aria-hidden="true"
@@ -317,22 +317,22 @@ export function Expenses({ tripId }: { tripId: string }) {
               </svg>
             </div>
             <Button size="sm" onClick={convertToUsd} disabled={converting}>{converting ? t('common.loading') : t('expenses.form.convert')}</Button>
-            <div className="text-sm text-gray-700 flex items-center">{usdAmount != null ? `≈ $${usdAmount.toFixed(2)} USD` : null}</div>
+            <div className="text-sm text-muted-foreground flex items-center">{usdAmount != null ? `≈ $${usdAmount.toFixed(2)} USD` : null}</div>
           </div>
           <div className="flex gap-2 items-center">
-            <div className="text-sm text-gray-600">{t('expenses.form.paidBy')}</div>
+            <div className="text-sm text-muted-foreground">{t('expenses.form.paidBy')}</div>
             <div className="relative">
               <select
-                className="appearance-none rounded-lg border border-gray-300 bg-white/90 px-3 py-2 pr-9 text-sm shadow-sm transition focus:border-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900 backdrop-blur"
+                className="appearance-none rounded-lg border border-input bg-background/90 px-3 py-2 pr-9 text-sm shadow-sm transition focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary backdrop-blur"
                 value={paidBy}
                 onChange={(e) => setPaidBy(e.target.value)}
               >
                 {members.map((m) => (
-                  <option key={m.user_id} value={m.user_id}>{m.display_name || (m.email ? m.email.split('@')[0] : m.user_id.slice(0,6))}</option>
+                  <option key={m.user_id} value={m.user_id}>{m.display_name || (m.email ? m.email.split('@')[0] : m.user_id.slice(0, 6))}</option>
                 ))}
               </select>
               <svg
-                className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500"
+                className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
                 viewBox="0 0 20 20"
                 fill="currentColor"
                 aria-hidden="true"
@@ -341,11 +341,11 @@ export function Expenses({ tripId }: { tripId: string }) {
               </svg>
             </div>
           </div>
-          <div className="text-sm text-gray-600">{t('expenses.form.participants')}</div>
+          <div className="text-sm text-muted-foreground">{t('expenses.form.participants')}</div>
           <div className="grid grid-cols-2 gap-1">
             {members.map((m) => (
-              <button key={m.user_id} type="button" onClick={() => toggleParticipant(m.user_id)} className={`px-2 py-1 rounded-md border ${selected[m.user_id] ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-900 border-gray-300'}`}>
-                {m.display_name || (m.email ? m.email.split('@')[0] : m.user_id.slice(0,6))}
+              <button key={m.user_id} type="button" onClick={() => toggleParticipant(m.user_id)} className={`px-2 py-1 rounded-md border ${selected[m.user_id] ? 'bg-primary text-primary-foreground border-border' : 'bg-card text-foreground border-border'}`}>
+                {m.display_name || (m.email ? m.email.split('@')[0] : m.user_id.slice(0, 6))}
               </button>
             ))}
           </div>
@@ -356,7 +356,7 @@ export function Expenses({ tripId }: { tripId: string }) {
       )}
 
       <div className="space-y-2">
-        {expenses.slice(0,10).map((e) => (
+        {expenses.slice(0, 10).map((e) => (
           <div key={e.id} className="text-sm border rounded-md p-2">
             {editingId === e.id ? (
               <div className="flex items-center gap-2">
@@ -370,17 +370,17 @@ export function Expenses({ tripId }: { tripId: string }) {
                   value={editAmountUsd}
                   onChange={(ev) => setEditAmountUsd(ev.target.value)}
                 />
-                <Button size="sm" onClick={() => saveEdit(e)}>Save</Button>
-                <Button size="sm" variant="outline" onClick={cancelEdit}>Cancel</Button>
+                <Button size="sm" onClick={() => saveEdit(e)}>{t('common.save')}</Button>
+                <Button size="sm" variant="outline" onClick={cancelEdit}>{t('common.cancel')}</Button>
               </div>
             ) : (
               <div className="flex items-center justify-between">
                 <div>
                   <div className="font-medium">{e.title}</div>
-                  <div className="text-gray-600">{t('expenses.paidByUser', { name: nameOf(e.paid_by) })}</div>
+                  <div className="text-muted-foreground">{t('expenses.paidByUser', { name: nameOf(e.paid_by) })}</div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <div className="font-semibold">${(e.amount_cents/100).toFixed(2)} USD</div>
+                  <div className="font-semibold">${(e.amount_cents / 100).toFixed(2)} USD</div>
                   <Button size="sm" variant="outline" onClick={() => startEdit(e)}>{t('common.edit')}</Button>
                   <Button size="sm" variant="ghost" onClick={() => deleteExpense(e)}>{t('common.delete')}</Button>
                 </div>
@@ -389,7 +389,7 @@ export function Expenses({ tripId }: { tripId: string }) {
           </div>
         ))}
         {expenses.length === 0 && (
-          <div className="text-sm text-gray-500">{t('expenses.none')}</div>
+          <div className="text-sm text-muted-foreground">{t('expenses.none')}</div>
         )}
       </div>
     </Card>

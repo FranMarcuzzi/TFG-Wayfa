@@ -66,7 +66,7 @@ export function TripList({ onCreateTrip }: TripListProps) {
     if (!memberTrips || memberTrips.length === 0) {
       setTrips([]);
       setLoading(false);
-      try { window.dispatchEvent(new CustomEvent('dashboard-section-loaded', { detail: 'trips' })); } catch {}
+      try { window.dispatchEvent(new CustomEvent('dashboard-section-loaded', { detail: 'trips' })); } catch { }
       return;
     }
 
@@ -83,7 +83,7 @@ export function TripList({ onCreateTrip }: TripListProps) {
     }
 
     setLoading(false);
-    try { window.dispatchEvent(new CustomEvent('dashboard-section-loaded', { detail: 'trips' })); } catch {}
+    try { window.dispatchEvent(new CustomEvent('dashboard-section-loaded', { detail: 'trips' })); } catch { }
   };
 
   const statusOf = (t: Trip): 'planning' | 'active' | 'past' => {
@@ -127,26 +127,26 @@ export function TripList({ onCreateTrip }: TripListProps) {
       <div className="space-y-5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="h-7 w-16 bg-gray-200 rounded-full animate-pulse" />
-            <div className="h-7 w-16 bg-gray-200 rounded-full animate-pulse" />
-            <div className="h-7 w-16 bg-gray-200 rounded-full animate-pulse" />
+            <div className="h-7 w-16 bg-muted rounded-full animate-pulse" />
+            <div className="h-7 w-16 bg-muted rounded-full animate-pulse" />
+            <div className="h-7 w-16 bg-muted rounded-full animate-pulse" />
           </div>
-          <div className="h-7 w-36 bg-gray-200 rounded-md animate-pulse" />
+          <div className="h-7 w-36 bg-muted rounded-md animate-pulse" />
         </div>
         <div className="space-y-5">
           {Array.from({ length: 5 }).map((_, i) => (
-            <div key={i} className="p-4 sm:p-5 rounded-2xl border border-gray-200 bg-white">
+            <div key={i} className="p-4 sm:p-5 rounded-2xl border border-border bg-card">
               <div className="flex items-start gap-4">
-                <div className="w-40 h-24 rounded-xl bg-gray-200 animate-pulse" />
+                <div className="w-40 h-24 rounded-xl bg-muted animate-pulse" />
                 <div className="flex-1 min-w-0 space-y-2">
-                  <div className="h-5 w-48 bg-gray-200 rounded animate-pulse" />
-                  <div className="h-4 w-32 bg-gray-200 rounded animate-pulse" />
-                  <div className="h-4 w-60 bg-gray-200 rounded animate-pulse" />
+                  <div className="h-5 w-48 bg-muted rounded animate-pulse" />
+                  <div className="h-4 w-32 bg-muted rounded animate-pulse" />
+                  <div className="h-4 w-60 bg-muted rounded animate-pulse" />
                 </div>
                 <div className="flex items-center gap-2">
-                  <div className="h-7 w-20 bg-gray-200 rounded-full animate-pulse" />
-                  <div className="h-8 w-8 bg-gray-200 rounded-full animate-pulse" />
-                  <div className="h-8 w-8 bg-gray-200 rounded-full animate-pulse" />
+                  <div className="h-7 w-20 bg-muted rounded-full animate-pulse" />
+                  <div className="h-8 w-8 bg-muted rounded-full animate-pulse" />
+                  <div className="h-8 w-8 bg-muted rounded-full animate-pulse" />
                 </div>
               </div>
             </div>
@@ -159,9 +159,9 @@ export function TripList({ onCreateTrip }: TripListProps) {
   if (trips.length === 0) {
     return (
       <div className="text-center py-12">
-        <p className="text-gray-600 mb-4">No trips yet. Create your first trip!</p>
+        <p className="text-muted-foreground mb-4">{t('triplist.empty')}</p>
         {onCreateTrip && (
-          <button onClick={onCreateTrip} className="px-4 py-2 rounded-md bg-gray-900 text-white">Create new trip</button>
+          <button onClick={onCreateTrip} className="px-4 py-2 rounded-md bg-primary text-primary-foreground">{t('triplist.create')}</button>
         )}
       </div>
     );
@@ -172,8 +172,8 @@ export function TripList({ onCreateTrip }: TripListProps) {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      const confirmMsg = 'Are you sure you want to delete this trip? This action cannot be undone.';
-      const confirmLeaveMsg = 'Do you want to leave this trip? You will be removed as a participant.';
+      const confirmMsg = t('triplist.delete.confirm');
+      const confirmLeaveMsg = t('triplist.leave.confirm');
 
       // Check if current user is owner
       const { data: tripRow } = await supabase
@@ -185,37 +185,35 @@ export function TripList({ onCreateTrip }: TripListProps) {
       const isOwner = (tripRow as any)?.owner_id === user.id;
 
       if (isOwner) {
-        const t = toast({
-          title: 'Delete trip?',
+        toast({
+          title: t('triplist.delete.title'),
           description: confirmMsg,
           action: (
             <ToastAction
-              altText="Delete"
+              altText={t('triplist.delete.action')}
               onClick={async () => {
                 const { error: delErr } = await supabase
-                  .from('trips')
-                  .delete()
-                  .eq('id', trip.id);
+                  .rpc('delete_trip', { p_trip_id: trip.id } as any);
                 if (delErr) {
-                  toast({ variant: 'destructive', title: 'Delete failed', description: delErr.message });
+                  toast({ variant: 'destructive', title: t('triplist.delete.failed'), description: delErr.message });
                 } else {
-                  toast({ title: 'Trip deleted' });
+                  toast({ title: t('triplist.delete.success') });
                   await loadTrips();
                 }
               }}
             >
-              Delete
+              {t('triplist.delete.action')}
             </ToastAction>
           ),
         });
         return;
       } else {
-        const t = toast({
-          title: 'Leave trip?',
+        toast({
+          title: t('triplist.leave.title'),
           description: confirmLeaveMsg,
           action: (
             <ToastAction
-              altText="Leave"
+              altText={t('triplist.leave.action')}
               onClick={async () => {
                 const { error: leaveErr } = await supabase
                   .from('trip_members')
@@ -223,21 +221,21 @@ export function TripList({ onCreateTrip }: TripListProps) {
                   .eq('trip_id', trip.id)
                   .eq('user_id', user.id);
                 if (leaveErr) {
-                  toast({ variant: 'destructive', title: 'Leave failed', description: leaveErr.message });
+                  toast({ variant: 'destructive', title: t('triplist.leave.failed'), description: leaveErr.message });
                 } else {
-                  toast({ title: 'You left the trip' });
+                  toast({ title: t('triplist.leave.success') });
                   await loadTrips();
                 }
               }}
             >
-              Leave
+              {t('triplist.leave.action')}
             </ToastAction>
           ),
         });
         return;
       }
     } catch (e: any) {
-      toast({ variant: 'destructive', title: 'Operation failed', description: e?.message || 'Failed to delete/leave trip' });
+      toast({ variant: 'destructive', title: t('triplist.operationFailed'), description: e?.message || t('triplist.operationFailedDesc') });
     }
   }
 
@@ -245,27 +243,27 @@ export function TripList({ onCreateTrip }: TripListProps) {
     <div className="space-y-5">
       <div className="flex items-center justify-between">
         <Reveal variant="fade">
-          <div className="flex items-center gap-2"> 
-            <button onClick={() => setFilter('all')} className={`px-3 py-1 rounded-full text-sm ${filter==='all'?'bg-gray-900 text-white':'bg-gray-100 text-gray-700'}`}>All</button>
-            <button onClick={() => setFilter('planning')} className={`px-3 py-1 rounded-full text-sm ${filter==='planning'?'bg-gray-900 text-white':'bg-gray-100 text-gray-700'}`}>Planning</button>
-            <button onClick={() => setFilter('active')} className={`px-3 py-1 rounded-full text-sm ${filter==='active'?'bg-gray-900 text-white':'bg-gray-100 text-gray-700'}`}>Active</button>
-            <button onClick={() => setFilter('past')} className={`px-3 py-1 rounded-full text-sm ${filter==='past'?'bg-gray-900 text-white':'bg-gray-100 text-gray-700'}`}>Past</button>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setFilter('all')} className={`px-3 py-1 rounded-full text-sm ${filter === 'all' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>{t('triplist.filter.all')}</button>
+            <button onClick={() => setFilter('planning')} className={`px-3 py-1 rounded-full text-sm ${filter === 'planning' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>{t('triplist.filter.planning')}</button>
+            <button onClick={() => setFilter('active')} className={`px-3 py-1 rounded-full text-sm ${filter === 'active' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>{t('triplist.filter.active')}</button>
+            <button onClick={() => setFilter('past')} className={`px-3 py-1 rounded-full text-sm ${filter === 'past' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>{t('triplist.filter.past')}</button>
           </div>
         </Reveal>
         <Reveal variant="slideIn" delayMs={80}>
           <div className="flex items-center gap-2">
-            <span className="text-sm text-gray-600">Sort by:</span>
+            <span className="text-sm text-muted-foreground">{t('triplist.sort.label')}</span>
             <div className="relative">
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value as 'date_desc' | 'date_asc')}
-                className="text-sm appearance-none rounded-lg border border-gray-300 bg-white/90 px-3 py-2 pr-9 shadow-sm transition focus:border-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900 backdrop-blur"
+                className="text-sm appearance-none rounded-lg border border-border bg-background/90 px-3 py-2 pr-9 shadow-sm transition focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary backdrop-blur"
               >
-                <option value="date_desc">Date (newest)</option>
-                <option value="date_asc">Date (oldest)</option>
+                <option value="date_desc">{t('triplist.sort.newest')}</option>
+                <option value="date_asc">{t('triplist.sort.oldest')}</option>
               </select>
               <svg
-                className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500"
+                className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
                 viewBox="0 0 20 20"
                 fill="currentColor"
                 aria-hidden="true"
@@ -284,79 +282,79 @@ export function TripList({ onCreateTrip }: TripListProps) {
               className="p-4 sm:p-5 hover:shadow-lg transition-shadow cursor-pointer rounded-2xl"
               onClick={() => router.push(`/trip/${trip.id}`)}
             >
-                <div className="flex items-start gap-4">
-                  <div className="w-40 h-24 rounded-xl overflow-hidden bg-gray-200 flex-shrink-0">
-                    <div
-                      className="w-full h-full bg-cover bg-center"
-                      style={{
-                        backgroundImage: `url(${trip.cover_url || 'https://images.unsplash.com/photo-1526481280698-8fcc13fdca73?q=80&w=800&auto=format&fit=crop'})`,
-                      }}
-                    />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h3 className="text-lg font-semibold text-gray-900 truncate">{trip.title}</h3>
-                          {(() => {
-                            const st = statusOf(trip);
-                            return (
-                              <Badge
-                                className={
-                                  st === 'active'
-                                    ? 'bg-green-100 text-green-700 border-green-200'
-                                    : st === 'planning'
-                                    ? 'bg-blue-100 text-blue-700 border-blue-200'
-                                    : 'bg-gray-100 text-gray-700 border-gray-200'
-                                }
-                                variant="outline"
-                              >
-                                {st === 'active' ? 'Active' : st === 'planning' ? 'Planning' : 'Past'}
-                              </Badge>
-                            );
-                          })()}
-                        </div>
-                        {trip.destination && (
-                          <div className="flex items-center gap-2 text-gray-600">
-                            <MapPin className="h-4 w-4" />
-                            <span className="text-sm">{trip.destination}</span>
-                          </div>
-                        )}
-                        {trip.start_date && trip.end_date && (
-                          <div className="flex items-center gap-2 text-gray-600 mt-1">
-                            <Calendar className="h-4 w-4" />
-                            <span className="text-sm">
-                              {format(new Date(trip.start_date), 'MMM d')} - {format(new Date(trip.end_date), 'MMM d, yyyy')}
-                            </span>
-                          </div>
-                        )}
-                      </div>
+              <div className="flex items-start gap-4">
+                <div className="w-40 h-24 rounded-xl overflow-hidden bg-muted flex-shrink-0">
+                  <div
+                    className="w-full h-full bg-cover bg-center"
+                    style={{
+                      backgroundImage: `url(${trip.cover_url || 'https://images.unsplash.com/photo-1526481280698-8fcc13fdca73?q=80&w=800&auto=format&fit=crop'})`,
+                    }}
+                  />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-start justify-between">
+                    <div>
                       <div className="flex items-center gap-2">
-                        <button
-                          className="px-2.5 py-1 rounded-full text-xs font-medium bg-black text-white hover:bg-black/90"
-                          onClick={(e) => { e.stopPropagation(); router.push(`/trip/${trip.id}`); }}
-                          title={t('trip.view')}
-                        >
-                          {t('trip.view')}
-                        </button>
-                        <button
-                          className="p-2 rounded-full bg-gray-100"
-                          onClick={(e) => { e.stopPropagation(); router.push(`/trip/${trip.id}?edit=1`); }}
-                          title={t('trip.edit')}
-                        >
-                          <Edit className="w-4 h-4 text-gray-600" />
-                        </button>
-                        <button
-                          className="p-2 rounded-full bg-gray-100"
-                          onClick={(e) => { e.stopPropagation(); handleDelete(trip); }}
-                          title={t('trip.delete')}
-                        >
-                          <Trash2 className="w-4 h-4 text-red-500" />
-                        </button>
+                        <h3 className="text-lg font-semibold text-foreground truncate">{trip.title}</h3>
+                        {(() => {
+                          const st = statusOf(trip);
+                          return (
+                            <Badge
+                              className={
+                                st === 'active'
+                                  ? 'bg-green-100 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800'
+                                  : st === 'planning'
+                                    ? 'bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800'
+                                    : 'bg-muted text-muted-foreground border-border'
+                              }
+                              variant="outline"
+                            >
+                              {st === 'active' ? t('triplist.filter.active') : st === 'planning' ? t('triplist.filter.planning') : t('triplist.filter.past')}
+                            </Badge>
+                          );
+                        })()}
                       </div>
+                      {trip.destination && (
+                        <div className="flex items-center gap-2 text-muted-foreground">
+                          <MapPin className="h-4 w-4" />
+                          <span className="text-sm">{trip.destination}</span>
+                        </div>
+                      )}
+                      {trip.start_date && trip.end_date && (
+                        <div className="flex items-center gap-2 text-muted-foreground mt-1">
+                          <Calendar className="h-4 w-4" />
+                          <span className="text-sm">
+                            {format(new Date(trip.start_date), 'MMM d')} - {format(new Date(trip.end_date), 'MMM d, yyyy')}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        className="px-2.5 py-1 rounded-full text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/90"
+                        onClick={(e) => { e.stopPropagation(); router.push(`/trip/${trip.id}`); }}
+                        title={t('trip.view')}
+                      >
+                        {t('trip.view')}
+                      </button>
+                      <button
+                        className="p-2 rounded-full bg-muted hover:bg-muted/80"
+                        onClick={(e) => { e.stopPropagation(); router.push(`/trip/${trip.id}?edit=1`); }}
+                        title={t('trip.edit')}
+                      >
+                        <Edit className="w-4 h-4 text-muted-foreground" />
+                      </button>
+                      <button
+                        className="p-2 rounded-full bg-muted hover:bg-muted/80"
+                        onClick={(e) => { e.stopPropagation(); handleDelete(trip); }}
+                        title={t('trip.delete')}
+                      >
+                        <Trash2 className="w-4 h-4 text-destructive" />
+                      </button>
                     </div>
                   </div>
                 </div>
+              </div>
             </Card>
           </Reveal>
         ))}

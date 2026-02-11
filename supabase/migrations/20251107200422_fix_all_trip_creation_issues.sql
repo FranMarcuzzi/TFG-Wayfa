@@ -1,97 +1,15 @@
-/*
-  # Fix All Trip Creation Issues - Complete Solution
-
-  ## Problems Identified
-  1. RLS policies block INSERT even with auth.uid() = owner_id
-  2. Trigger on_trip_created adds owner to trip_members
-  3. Function create_trip_with_member ALSO adds owner to trip_members
-  4. Result: Duplicate key constraint violation
-
-  ## Complete Solution
-  1. Keep the trigger (simpler approach)
-  2. Remove the function create_trip_with_member
-  3. Fix the RLS policies to allow authenticated users to insert
-  4. Use a more permissive INSERT policy that checks auth.uid() IS NOT NULL
-
-  ## Changes
-  1. Drop the create_trip_with_member function
-  2. Update RLS policies for trips to be more permissive
-  3. Keep the trigger for automatic trip_members insertion
-*/
-
--- ============================================================================
--- 1. Drop the function we just created (causes duplicates)
--- ============================================================================
-
-DROP FUNCTION IF EXISTS public.create_trip_with_member;
-
--- ============================================================================
--- 2. Drop ALL existing INSERT policies for trips
--- ============================================================================
-
-DROP POLICY IF EXISTS "anon_can_insert_trips" ON public.trips;
-DROP POLICY IF EXISTS "Users can create trips" ON public.trips;
-DROP POLICY IF EXISTS "authenticated_can_insert_trips" ON public.trips;
-
--- ============================================================================
--- 3. Create a SINGLE, WORKING INSERT policy for trips
--- ============================================================================
-
--- For AUTHENTICATED role: allow insert if user sets themselves as owner
-CREATE POLICY "authenticated_users_can_create_trips"
-  ON public.trips
-  FOR INSERT
-  TO authenticated
-  WITH CHECK (
-    auth.uid() IS NOT NULL 
-    AND owner_id = auth.uid()
-  );
-
--- For ANON role: allow insert if user sets themselves as owner
--- This is needed because the Supabase client uses anon role even when authenticated
-CREATE POLICY "anon_users_can_create_trips"
-  ON public.trips
-  FOR INSERT
-  TO anon
-  WITH CHECK (
-    auth.uid() IS NOT NULL 
-    AND owner_id = auth.uid()
-  );
-
--- ============================================================================
--- 4. Verify trigger exists and is correct
--- ============================================================================
-
--- Recreate the trigger function to be safe
-CREATE OR REPLACE FUNCTION public.add_trip_owner_as_organizer()
-RETURNS TRIGGER
-SECURITY DEFINER
-SET search_path = public
-LANGUAGE plpgsql
-AS $$
-BEGIN
-  -- Add owner as organizer in trip_members
-  -- Use INSERT with ON CONFLICT to avoid duplicates
-  INSERT INTO public.trip_members (trip_id, user_id, role)
-  VALUES (NEW.id, NEW.owner_id, 'organizer')
-  ON CONFLICT (trip_id, user_id) DO NOTHING;
-  
-  RETURN NEW;
-END;
-$$;
-
--- Recreate the trigger
-DROP TRIGGER IF EXISTS on_trip_created ON public.trips;
-
-CREATE TRIGGER on_trip_created
-  AFTER INSERT ON public.trips
-  FOR EACH ROW
-  EXECUTE FUNCTION add_trip_owner_as_organizer();
-
--- ============================================================================
--- 5. Grant necessary permissions
--- ============================================================================
-
--- Make sure anon and authenticated can execute the trigger function
-GRANT EXECUTE ON FUNCTION public.add_trip_owner_as_organizer TO anon;
-GRANT EXECUTE ON FUNCTION public.add_trip_owner_as_organizer TO authenticated;
+/*\n  # Fix All Trip Creation Issues - Complete Solution\n\n  ## Problems Identified\n  1. RLS policies block INSERT even with auth.uid() = owner_id\n  2. Trigger on_trip_created adds owner to trip_members\n  3. Function create_trip_with_member ALSO adds owner to trip_members\n  4. Result: Duplicate key constraint violation\n\n  ## Complete Solution\n  1. Keep the trigger (simpler approach)\n  2. Remove the function create_trip_with_member\n  3. Fix the RLS policies to allow authenticated users to insert\n  4. Use a more permissive INSERT policy that checks auth.uid() IS NOT NULL\n\n  ## Changes\n  1. Drop the create_trip_with_member function\n  2. Update RLS policies for trips to be more permissive\n  3. Keep the trigger for automatic trip_members insertion\n*/\n\n-- ============================================================================\n-- 1. Drop the function we just created (causes duplicates)\n-- ============================================================================\n\nDROP FUNCTION IF EXISTS public.create_trip_with_member;
+\n\n-- ============================================================================\n-- 2. Drop ALL existing INSERT policies for trips\n-- ============================================================================\n\nDROP POLICY IF EXISTS "anon_can_insert_trips" ON public.trips;
+\nDROP POLICY IF EXISTS "Users can create trips" ON public.trips;
+\nDROP POLICY IF EXISTS "authenticated_can_insert_trips" ON public.trips;
+\n\n-- ============================================================================\n-- 3. Create a SINGLE, WORKING INSERT policy for trips\n-- ============================================================================\n\n-- For AUTHENTICATED role: allow insert if user sets themselves as owner\nCREATE POLICY "authenticated_users_can_create_trips"\n  ON public.trips\n  FOR INSERT\n  TO authenticated\n  WITH CHECK (\n    auth.uid() IS NOT NULL \n    AND owner_id = auth.uid()\n  );
+\n\n-- For ANON role: allow insert if user sets themselves as owner\n-- This is needed because the Supabase client uses anon role even when authenticated\nCREATE POLICY "anon_users_can_create_trips"\n  ON public.trips\n  FOR INSERT\n  TO anon\n  WITH CHECK (\n    auth.uid() IS NOT NULL \n    AND owner_id = auth.uid()\n  );
+\n\n-- ============================================================================\n-- 4. Verify trigger exists and is correct\n-- ============================================================================\n\n-- Recreate the trigger function to be safe\nCREATE OR REPLACE FUNCTION public.add_trip_owner_as_organizer()\nRETURNS TRIGGER\nSECURITY DEFINER\nSET search_path = public\nLANGUAGE plpgsql\nAS $$\nBEGIN\n  -- Add owner as organizer in trip_members\n  -- Use INSERT with ON CONFLICT to avoid duplicates\n  INSERT INTO public.trip_members (trip_id, user_id, role)\n  VALUES (NEW.id, NEW.owner_id, 'organizer')\n  ON CONFLICT (trip_id, user_id) DO NOTHING;
+\n  \n  RETURN NEW;
+\nEND;
+\n$$;
+\n\n-- Recreate the trigger\nDROP TRIGGER IF EXISTS on_trip_created ON public.trips;
+\n\nCREATE TRIGGER on_trip_created\n  AFTER INSERT ON public.trips\n  FOR EACH ROW\n  EXECUTE FUNCTION add_trip_owner_as_organizer();
+\n\n-- ============================================================================\n-- 5. Grant necessary permissions\n-- ============================================================================\n\n-- Make sure anon and authenticated can execute the trigger function\nGRANT EXECUTE ON FUNCTION public.add_trip_owner_as_organizer TO anon;
+\nGRANT EXECUTE ON FUNCTION public.add_trip_owner_as_organizer TO authenticated;
+\n;

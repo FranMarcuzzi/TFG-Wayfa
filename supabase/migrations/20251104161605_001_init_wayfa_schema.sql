@@ -1,480 +1,54 @@
-/*
-  # Wayfa - Collaborative Trip Planning Schema
-
-  ## Overview
-  This migration creates the complete database schema for the Wayfa collaborative trip planning application.
-
-  ## New Tables
-
-  ### `trips`
-  - `id` (uuid, primary key) - Unique trip identifier
-  - `owner_id` (uuid) - Trip creator/owner reference to auth.users
-  - `title` (text) - Trip name
-  - `destination` (text) - Trip destination
-  - `start_date` (date) - Trip start date
-  - `end_date` (date) - Trip end date
-  - `created_at` (timestamptz) - Creation timestamp
-
-  ### `trip_members`
-  - `trip_id` (uuid) - Reference to trips
-  - `user_id` (uuid) - Reference to auth.users
-  - `role` (text) - Either 'organizer' or 'participant'
-  - Primary key: (trip_id, user_id)
-
-  ### `days`
-  - `id` (uuid, primary key) - Unique day identifier
-  - `trip_id` (uuid) - Reference to trips
-  - `day_index` (int) - Day number in the trip
-  - `date` (date) - Actual date of the day
-  - Unique constraint on (trip_id, day_index)
-
-  ### `activities`
-  - `id` (uuid, primary key) - Unique activity identifier
-  - `day_id` (uuid) - Reference to days
-  - `title` (text) - Activity name
-  - `starts_at` (time) - Start time
-  - `ends_at` (time) - End time
-  - `location` (text) - Activity location
-
-  ### `messages`
-  - `id` (uuid, primary key) - Unique message identifier
-  - `trip_id` (uuid) - Reference to trips
-  - `author_id` (uuid) - Reference to auth.users
-  - `content` (text) - Message content
-  - `created_at` (timestamptz) - Creation timestamp
-
-  ### `polls`
-  - `id` (uuid, primary key) - Unique poll identifier
-  - `trip_id` (uuid) - Reference to trips
-  - `question` (text) - Poll question
-  - `created_by` (uuid) - Reference to auth.users
-  - `created_at` (timestamptz) - Creation timestamp
-
-  ### `poll_options`
-  - `id` (uuid, primary key) - Unique option identifier
-  - `poll_id` (uuid) - Reference to polls
-  - `label` (text) - Option text
-
-  ### `poll_votes`
-  - `poll_id` (uuid) - Reference to polls
-  - `option_id` (uuid) - Reference to poll_options
-  - `user_id` (uuid) - Reference to auth.users
-  - `created_at` (timestamptz) - Creation timestamp
-  - Primary key: (poll_id, user_id) - One vote per user per poll
-
-  ## Security
-  - RLS enabled on all tables
-  - Users can view trips they are members of
-  - Users can create trips (automatically become organizer)
-  - Trip members can add days, activities, messages, polls, and votes
-  - Users can only edit/delete content they created
-
-  ## Indexes
-  - Indexed foreign keys for efficient queries
-  - Indexed trip_id on all trip-related tables
-  - Indexed created_at on messages for chat ordering
-
-  ## Important Notes
-  1. Realtime must be enabled on: activities, messages, polls, poll_options, poll_votes
-  2. Trip owner is automatically added as organizer in trip_members
-  3. All cascading deletes ensure data consistency
-*/
-
--- Create trips table
-CREATE TABLE IF NOT EXISTS public.trips (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  owner_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  title text NOT NULL,
-  destination text,
-  start_date date,
-  end_date date,
-  created_at timestamptz DEFAULT now()
-);
-
-ALTER TABLE public.trips ENABLE ROW LEVEL SECURITY;
-
--- Create trip_members table
-CREATE TABLE IF NOT EXISTS public.trip_members (
-  trip_id uuid REFERENCES public.trips(id) ON DELETE CASCADE,
-  user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE,
-  role text CHECK (role IN ('organizer','participant')) DEFAULT 'participant',
-  PRIMARY KEY (trip_id, user_id)
-);
-
-ALTER TABLE public.trip_members ENABLE ROW LEVEL SECURITY;
-
--- Create days table
-CREATE TABLE IF NOT EXISTS public.days (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  trip_id uuid NOT NULL REFERENCES public.trips(id) ON DELETE CASCADE,
-  day_index int NOT NULL,
-  date date,
-  UNIQUE (trip_id, day_index)
-);
-
-CREATE INDEX IF NOT EXISTS idx_days_trip_id ON public.days(trip_id);
-
-ALTER TABLE public.days ENABLE ROW LEVEL SECURITY;
-
--- Create activities table
-CREATE TABLE IF NOT EXISTS public.activities (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  day_id uuid NOT NULL REFERENCES public.days(id) ON DELETE CASCADE,
-  title text NOT NULL,
-  starts_at time,
-  ends_at time,
-  location text
-);
-
-CREATE INDEX IF NOT EXISTS idx_activities_day_id ON public.activities(day_id);
-
-ALTER TABLE public.activities ENABLE ROW LEVEL SECURITY;
-
--- Create messages table
-CREATE TABLE IF NOT EXISTS public.messages (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  trip_id uuid NOT NULL REFERENCES public.trips(id) ON DELETE CASCADE,
-  author_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  content text NOT NULL,
-  created_at timestamptz DEFAULT now()
-);
-
-CREATE INDEX IF NOT EXISTS idx_messages_trip_id_created_at ON public.messages(trip_id, created_at);
-
-ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
-
--- Create polls table
-CREATE TABLE IF NOT EXISTS public.polls (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  trip_id uuid NOT NULL REFERENCES public.trips(id) ON DELETE CASCADE,
-  question text NOT NULL,
-  created_by uuid NOT NULL REFERENCES auth.users(id),
-  created_at timestamptz DEFAULT now()
-);
-
-CREATE INDEX IF NOT EXISTS idx_polls_trip_id ON public.polls(trip_id);
-
-ALTER TABLE public.polls ENABLE ROW LEVEL SECURITY;
-
--- Create poll_options table
-CREATE TABLE IF NOT EXISTS public.poll_options (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  poll_id uuid NOT NULL REFERENCES public.polls(id) ON DELETE CASCADE,
-  label text NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_poll_options_poll_id ON public.poll_options(poll_id);
-
-ALTER TABLE public.poll_options ENABLE ROW LEVEL SECURITY;
-
--- Create poll_votes table
-CREATE TABLE IF NOT EXISTS public.poll_votes (
-  poll_id uuid NOT NULL REFERENCES public.polls(id) ON DELETE CASCADE,
-  option_id uuid NOT NULL REFERENCES public.poll_options(id) ON DELETE CASCADE,
-  user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  created_at timestamptz DEFAULT now(),
-  PRIMARY KEY (poll_id, user_id)
-);
-
-CREATE INDEX IF NOT EXISTS idx_poll_votes_option_id ON public.poll_votes(option_id);
-
-ALTER TABLE public.poll_votes ENABLE ROW LEVEL SECURITY;
-
--- RLS Policies for trips
-CREATE POLICY "Users can view trips they are members of"
-  ON public.trips FOR SELECT
-  TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.trip_members
-      WHERE trip_members.trip_id = trips.id
-      AND trip_members.user_id = auth.uid()
-    )
-  );
-
-CREATE POLICY "Users can create trips"
-  ON public.trips FOR INSERT
-  TO authenticated
-  WITH CHECK (auth.uid() = owner_id);
-
-CREATE POLICY "Trip owners can update their trips"
-  ON public.trips FOR UPDATE
-  TO authenticated
-  USING (auth.uid() = owner_id)
-  WITH CHECK (auth.uid() = owner_id);
-
-CREATE POLICY "Trip owners can delete their trips"
-  ON public.trips FOR DELETE
-  TO authenticated
-  USING (auth.uid() = owner_id);
-
--- RLS Policies for trip_members
-CREATE POLICY "Users can view members of trips they belong to"
-  ON public.trip_members FOR SELECT
-  TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.trip_members tm
-      WHERE tm.trip_id = trip_members.trip_id
-      AND tm.user_id = auth.uid()
-    )
-  );
-
-CREATE POLICY "Trip organizers can add members"
-  ON public.trip_members FOR INSERT
-  TO authenticated
-  WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM public.trip_members
-      WHERE trip_members.trip_id = trip_members.trip_id
-      AND trip_members.user_id = auth.uid()
-      AND trip_members.role = 'organizer'
-    )
-  );
-
-CREATE POLICY "Trip organizers can remove members"
-  ON public.trip_members FOR DELETE
-  TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.trip_members tm
-      WHERE tm.trip_id = trip_members.trip_id
-      AND tm.user_id = auth.uid()
-      AND tm.role = 'organizer'
-    )
-  );
-
--- RLS Policies for days
-CREATE POLICY "Users can view days for trips they are members of"
-  ON public.days FOR SELECT
-  TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.trip_members
-      WHERE trip_members.trip_id = days.trip_id
-      AND trip_members.user_id = auth.uid()
-    )
-  );
-
-CREATE POLICY "Trip members can create days"
-  ON public.days FOR INSERT
-  TO authenticated
-  WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM public.trip_members
-      WHERE trip_members.trip_id = days.trip_id
-      AND trip_members.user_id = auth.uid()
-    )
-  );
-
-CREATE POLICY "Trip members can update days"
-  ON public.days FOR UPDATE
-  TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.trip_members
-      WHERE trip_members.trip_id = days.trip_id
-      AND trip_members.user_id = auth.uid()
-    )
-  )
-  WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM public.trip_members
-      WHERE trip_members.trip_id = days.trip_id
-      AND trip_members.user_id = auth.uid()
-    )
-  );
-
-CREATE POLICY "Trip members can delete days"
-  ON public.days FOR DELETE
-  TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.trip_members
-      WHERE trip_members.trip_id = days.trip_id
-      AND trip_members.user_id = auth.uid()
-    )
-  );
-
--- RLS Policies for activities
-CREATE POLICY "Users can view activities for trips they are members of"
-  ON public.activities FOR SELECT
-  TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.days
-      JOIN public.trip_members ON trip_members.trip_id = days.trip_id
-      WHERE days.id = activities.day_id
-      AND trip_members.user_id = auth.uid()
-    )
-  );
-
-CREATE POLICY "Trip members can create activities"
-  ON public.activities FOR INSERT
-  TO authenticated
-  WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM public.days
-      JOIN public.trip_members ON trip_members.trip_id = days.trip_id
-      WHERE days.id = activities.day_id
-      AND trip_members.user_id = auth.uid()
-    )
-  );
-
-CREATE POLICY "Trip members can update activities"
-  ON public.activities FOR UPDATE
-  TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.days
-      JOIN public.trip_members ON trip_members.trip_id = days.trip_id
-      WHERE days.id = activities.day_id
-      AND trip_members.user_id = auth.uid()
-    )
-  )
-  WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM public.days
-      JOIN public.trip_members ON trip_members.trip_id = days.trip_id
-      WHERE days.id = activities.day_id
-      AND trip_members.user_id = auth.uid()
-    )
-  );
-
-CREATE POLICY "Trip members can delete activities"
-  ON public.activities FOR DELETE
-  TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.days
-      JOIN public.trip_members ON trip_members.trip_id = days.trip_id
-      WHERE days.id = activities.day_id
-      AND trip_members.user_id = auth.uid()
-    )
-  );
-
--- RLS Policies for messages
-CREATE POLICY "Users can view messages for trips they are members of"
-  ON public.messages FOR SELECT
-  TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.trip_members
-      WHERE trip_members.trip_id = messages.trip_id
-      AND trip_members.user_id = auth.uid()
-    )
-  );
-
-CREATE POLICY "Trip members can create messages"
-  ON public.messages FOR INSERT
-  TO authenticated
-  WITH CHECK (
-    auth.uid() = author_id
-    AND EXISTS (
-      SELECT 1 FROM public.trip_members
-      WHERE trip_members.trip_id = messages.trip_id
-      AND trip_members.user_id = auth.uid()
-    )
-  );
-
--- RLS Policies for polls
-CREATE POLICY "Users can view polls for trips they are members of"
-  ON public.polls FOR SELECT
-  TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.trip_members
-      WHERE trip_members.trip_id = polls.trip_id
-      AND trip_members.user_id = auth.uid()
-    )
-  );
-
-CREATE POLICY "Trip members can create polls"
-  ON public.polls FOR INSERT
-  TO authenticated
-  WITH CHECK (
-    auth.uid() = created_by
-    AND EXISTS (
-      SELECT 1 FROM public.trip_members
-      WHERE trip_members.trip_id = polls.trip_id
-      AND trip_members.user_id = auth.uid()
-    )
-  );
-
--- RLS Policies for poll_options
-CREATE POLICY "Users can view poll options for trips they are members of"
-  ON public.poll_options FOR SELECT
-  TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.polls
-      JOIN public.trip_members ON trip_members.trip_id = polls.trip_id
-      WHERE polls.id = poll_options.poll_id
-      AND trip_members.user_id = auth.uid()
-    )
-  );
-
-CREATE POLICY "Poll creators can add options"
-  ON public.poll_options FOR INSERT
-  TO authenticated
-  WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM public.polls
-      WHERE polls.id = poll_options.poll_id
-      AND polls.created_by = auth.uid()
-    )
-  );
-
--- RLS Policies for poll_votes
-CREATE POLICY "Users can view votes for trips they are members of"
-  ON public.poll_votes FOR SELECT
-  TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.polls
-      JOIN public.trip_members ON trip_members.trip_id = polls.trip_id
-      WHERE polls.id = poll_votes.poll_id
-      AND trip_members.user_id = auth.uid()
-    )
-  );
-
-CREATE POLICY "Trip members can vote on polls"
-  ON public.poll_votes FOR INSERT
-  TO authenticated
-  WITH CHECK (
-    auth.uid() = user_id
-    AND EXISTS (
-      SELECT 1 FROM public.polls
-      JOIN public.trip_members ON trip_members.trip_id = polls.trip_id
-      WHERE polls.id = poll_votes.poll_id
-      AND trip_members.user_id = auth.uid()
-    )
-  );
-
-CREATE POLICY "Users can update their own votes"
-  ON public.poll_votes FOR UPDATE
-  TO authenticated
-  USING (auth.uid() = user_id)
-  WITH CHECK (auth.uid() = user_id);
-
-CREATE POLICY "Users can delete their own votes"
-  ON public.poll_votes FOR DELETE
-  TO authenticated
-  USING (auth.uid() = user_id);
-
--- Function to automatically add trip owner as organizer
-CREATE OR REPLACE FUNCTION public.add_trip_owner_as_organizer()
-RETURNS TRIGGER AS $$
-BEGIN
-  INSERT INTO public.trip_members (trip_id, user_id, role)
-  VALUES (NEW.id, NEW.owner_id, 'organizer');
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
--- Trigger to add owner as organizer when trip is created
-DROP TRIGGER IF EXISTS on_trip_created ON public.trips;
-CREATE TRIGGER on_trip_created
-  AFTER INSERT ON public.trips
-  FOR EACH ROW
-  EXECUTE FUNCTION public.add_trip_owner_as_organizer();
+/*\n  # Wayfa - Collaborative Trip Planning Schema\n\n  ## Overview\n  This migration creates the complete database schema for the Wayfa collaborative trip planning application.\n\n  ## New Tables\n\n  ### `trips`\n  - `id` (uuid, primary key) - Unique trip identifier\n  - `owner_id` (uuid) - Trip creator/owner reference to auth.users\n  - `title` (text) - Trip name\n  - `destination` (text) - Trip destination\n  - `start_date` (date) - Trip start date\n  - `end_date` (date) - Trip end date\n  - `created_at` (timestamptz) - Creation timestamp\n\n  ### `trip_members`\n  - `trip_id` (uuid) - Reference to trips\n  - `user_id` (uuid) - Reference to auth.users\n  - `role` (text) - Either 'organizer' or 'participant'\n  - Primary key: (trip_id, user_id)\n\n  ### `days`\n  - `id` (uuid, primary key) - Unique day identifier\n  - `trip_id` (uuid) - Reference to trips\n  - `day_index` (int) - Day number in the trip\n  - `date` (date) - Actual date of the day\n  - Unique constraint on (trip_id, day_index)\n\n  ### `activities`\n  - `id` (uuid, primary key) - Unique activity identifier\n  - `day_id` (uuid) - Reference to days\n  - `title` (text) - Activity name\n  - `starts_at` (time) - Start time\n  - `ends_at` (time) - End time\n  - `location` (text) - Activity location\n\n  ### `messages`\n  - `id` (uuid, primary key) - Unique message identifier\n  - `trip_id` (uuid) - Reference to trips\n  - `author_id` (uuid) - Reference to auth.users\n  - `content` (text) - Message content\n  - `created_at` (timestamptz) - Creation timestamp\n\n  ### `polls`\n  - `id` (uuid, primary key) - Unique poll identifier\n  - `trip_id` (uuid) - Reference to trips\n  - `question` (text) - Poll question\n  - `created_by` (uuid) - Reference to auth.users\n  - `created_at` (timestamptz) - Creation timestamp\n\n  ### `poll_options`\n  - `id` (uuid, primary key) - Unique option identifier\n  - `poll_id` (uuid) - Reference to polls\n  - `label` (text) - Option text\n\n  ### `poll_votes`\n  - `poll_id` (uuid) - Reference to polls\n  - `option_id` (uuid) - Reference to poll_options\n  - `user_id` (uuid) - Reference to auth.users\n  - `created_at` (timestamptz) - Creation timestamp\n  - Primary key: (poll_id, user_id) - One vote per user per poll\n\n  ## Security\n  - RLS enabled on all tables\n  - Users can view trips they are members of\n  - Users can create trips (automatically become organizer)\n  - Trip members can add days, activities, messages, polls, and votes\n  - Users can only edit/delete content they created\n\n  ## Indexes\n  - Indexed foreign keys for efficient queries\n  - Indexed trip_id on all trip-related tables\n  - Indexed created_at on messages for chat ordering\n\n  ## Important Notes\n  1. Realtime must be enabled on: activities, messages, polls, poll_options, poll_votes\n  2. Trip owner is automatically added as organizer in trip_members\n  3. All cascading deletes ensure data consistency\n*/\n\n-- Create trips table\nCREATE TABLE IF NOT EXISTS public.trips (\n  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),\n  owner_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,\n  title text NOT NULL,\n  destination text,\n  start_date date,\n  end_date date,\n  created_at timestamptz DEFAULT now()\n);
+\n\nALTER TABLE public.trips ENABLE ROW LEVEL SECURITY;
+\n\n-- Create trip_members table\nCREATE TABLE IF NOT EXISTS public.trip_members (\n  trip_id uuid REFERENCES public.trips(id) ON DELETE CASCADE,\n  user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE,\n  role text CHECK (role IN ('organizer','participant')) DEFAULT 'participant',\n  PRIMARY KEY (trip_id, user_id)\n);
+\n\nALTER TABLE public.trip_members ENABLE ROW LEVEL SECURITY;
+\n\n-- Create days table\nCREATE TABLE IF NOT EXISTS public.days (\n  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),\n  trip_id uuid NOT NULL REFERENCES public.trips(id) ON DELETE CASCADE,\n  day_index int NOT NULL,\n  date date,\n  UNIQUE (trip_id, day_index)\n);
+\n\nCREATE INDEX IF NOT EXISTS idx_days_trip_id ON public.days(trip_id);
+\n\nALTER TABLE public.days ENABLE ROW LEVEL SECURITY;
+\n\n-- Create activities table\nCREATE TABLE IF NOT EXISTS public.activities (\n  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),\n  day_id uuid NOT NULL REFERENCES public.days(id) ON DELETE CASCADE,\n  title text NOT NULL,\n  starts_at time,\n  ends_at time,\n  location text\n);
+\n\nCREATE INDEX IF NOT EXISTS idx_activities_day_id ON public.activities(day_id);
+\n\nALTER TABLE public.activities ENABLE ROW LEVEL SECURITY;
+\n\n-- Create messages table\nCREATE TABLE IF NOT EXISTS public.messages (\n  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),\n  trip_id uuid NOT NULL REFERENCES public.trips(id) ON DELETE CASCADE,\n  author_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,\n  content text NOT NULL,\n  created_at timestamptz DEFAULT now()\n);
+\n\nCREATE INDEX IF NOT EXISTS idx_messages_trip_id_created_at ON public.messages(trip_id, created_at);
+\n\nALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
+\n\n-- Create polls table\nCREATE TABLE IF NOT EXISTS public.polls (\n  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),\n  trip_id uuid NOT NULL REFERENCES public.trips(id) ON DELETE CASCADE,\n  question text NOT NULL,\n  created_by uuid NOT NULL REFERENCES auth.users(id),\n  created_at timestamptz DEFAULT now()\n);
+\n\nCREATE INDEX IF NOT EXISTS idx_polls_trip_id ON public.polls(trip_id);
+\n\nALTER TABLE public.polls ENABLE ROW LEVEL SECURITY;
+\n\n-- Create poll_options table\nCREATE TABLE IF NOT EXISTS public.poll_options (\n  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),\n  poll_id uuid NOT NULL REFERENCES public.polls(id) ON DELETE CASCADE,\n  label text NOT NULL\n);
+\n\nCREATE INDEX IF NOT EXISTS idx_poll_options_poll_id ON public.poll_options(poll_id);
+\n\nALTER TABLE public.poll_options ENABLE ROW LEVEL SECURITY;
+\n\n-- Create poll_votes table\nCREATE TABLE IF NOT EXISTS public.poll_votes (\n  poll_id uuid NOT NULL REFERENCES public.polls(id) ON DELETE CASCADE,\n  option_id uuid NOT NULL REFERENCES public.poll_options(id) ON DELETE CASCADE,\n  user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,\n  created_at timestamptz DEFAULT now(),\n  PRIMARY KEY (poll_id, user_id)\n);
+\n\nCREATE INDEX IF NOT EXISTS idx_poll_votes_option_id ON public.poll_votes(option_id);
+\n\nALTER TABLE public.poll_votes ENABLE ROW LEVEL SECURITY;
+\n\n-- RLS Policies for trips\nCREATE POLICY "Users can view trips they are members of"\n  ON public.trips FOR SELECT\n  TO authenticated\n  USING (\n    EXISTS (\n      SELECT 1 FROM public.trip_members\n      WHERE trip_members.trip_id = trips.id\n      AND trip_members.user_id = auth.uid()\n    )\n  );
+\n\nCREATE POLICY "Users can create trips"\n  ON public.trips FOR INSERT\n  TO authenticated\n  WITH CHECK (auth.uid() = owner_id);
+\n\nCREATE POLICY "Trip owners can update their trips"\n  ON public.trips FOR UPDATE\n  TO authenticated\n  USING (auth.uid() = owner_id)\n  WITH CHECK (auth.uid() = owner_id);
+\n\nCREATE POLICY "Trip owners can delete their trips"\n  ON public.trips FOR DELETE\n  TO authenticated\n  USING (auth.uid() = owner_id);
+\n\n-- RLS Policies for trip_members\nCREATE POLICY "Users can view members of trips they belong to"\n  ON public.trip_members FOR SELECT\n  TO authenticated\n  USING (\n    EXISTS (\n      SELECT 1 FROM public.trip_members tm\n      WHERE tm.trip_id = trip_members.trip_id\n      AND tm.user_id = auth.uid()\n    )\n  );
+\n\nCREATE POLICY "Trip organizers can add members"\n  ON public.trip_members FOR INSERT\n  TO authenticated\n  WITH CHECK (\n    EXISTS (\n      SELECT 1 FROM public.trip_members\n      WHERE trip_members.trip_id = trip_members.trip_id\n      AND trip_members.user_id = auth.uid()\n      AND trip_members.role = 'organizer'\n    )\n  );
+\n\nCREATE POLICY "Trip organizers can remove members"\n  ON public.trip_members FOR DELETE\n  TO authenticated\n  USING (\n    EXISTS (\n      SELECT 1 FROM public.trip_members tm\n      WHERE tm.trip_id = trip_members.trip_id\n      AND tm.user_id = auth.uid()\n      AND tm.role = 'organizer'\n    )\n  );
+\n\n-- RLS Policies for days\nCREATE POLICY "Users can view days for trips they are members of"\n  ON public.days FOR SELECT\n  TO authenticated\n  USING (\n    EXISTS (\n      SELECT 1 FROM public.trip_members\n      WHERE trip_members.trip_id = days.trip_id\n      AND trip_members.user_id = auth.uid()\n    )\n  );
+\n\nCREATE POLICY "Trip members can create days"\n  ON public.days FOR INSERT\n  TO authenticated\n  WITH CHECK (\n    EXISTS (\n      SELECT 1 FROM public.trip_members\n      WHERE trip_members.trip_id = days.trip_id\n      AND trip_members.user_id = auth.uid()\n    )\n  );
+\n\nCREATE POLICY "Trip members can update days"\n  ON public.days FOR UPDATE\n  TO authenticated\n  USING (\n    EXISTS (\n      SELECT 1 FROM public.trip_members\n      WHERE trip_members.trip_id = days.trip_id\n      AND trip_members.user_id = auth.uid()\n    )\n  )\n  WITH CHECK (\n    EXISTS (\n      SELECT 1 FROM public.trip_members\n      WHERE trip_members.trip_id = days.trip_id\n      AND trip_members.user_id = auth.uid()\n    )\n  );
+\n\nCREATE POLICY "Trip members can delete days"\n  ON public.days FOR DELETE\n  TO authenticated\n  USING (\n    EXISTS (\n      SELECT 1 FROM public.trip_members\n      WHERE trip_members.trip_id = days.trip_id\n      AND trip_members.user_id = auth.uid()\n    )\n  );
+\n\n-- RLS Policies for activities\nCREATE POLICY "Users can view activities for trips they are members of"\n  ON public.activities FOR SELECT\n  TO authenticated\n  USING (\n    EXISTS (\n      SELECT 1 FROM public.days\n      JOIN public.trip_members ON trip_members.trip_id = days.trip_id\n      WHERE days.id = activities.day_id\n      AND trip_members.user_id = auth.uid()\n    )\n  );
+\n\nCREATE POLICY "Trip members can create activities"\n  ON public.activities FOR INSERT\n  TO authenticated\n  WITH CHECK (\n    EXISTS (\n      SELECT 1 FROM public.days\n      JOIN public.trip_members ON trip_members.trip_id = days.trip_id\n      WHERE days.id = activities.day_id\n      AND trip_members.user_id = auth.uid()\n    )\n  );
+\n\nCREATE POLICY "Trip members can update activities"\n  ON public.activities FOR UPDATE\n  TO authenticated\n  USING (\n    EXISTS (\n      SELECT 1 FROM public.days\n      JOIN public.trip_members ON trip_members.trip_id = days.trip_id\n      WHERE days.id = activities.day_id\n      AND trip_members.user_id = auth.uid()\n    )\n  )\n  WITH CHECK (\n    EXISTS (\n      SELECT 1 FROM public.days\n      JOIN public.trip_members ON trip_members.trip_id = days.trip_id\n      WHERE days.id = activities.day_id\n      AND trip_members.user_id = auth.uid()\n    )\n  );
+\n\nCREATE POLICY "Trip members can delete activities"\n  ON public.activities FOR DELETE\n  TO authenticated\n  USING (\n    EXISTS (\n      SELECT 1 FROM public.days\n      JOIN public.trip_members ON trip_members.trip_id = days.trip_id\n      WHERE days.id = activities.day_id\n      AND trip_members.user_id = auth.uid()\n    )\n  );
+\n\n-- RLS Policies for messages\nCREATE POLICY "Users can view messages for trips they are members of"\n  ON public.messages FOR SELECT\n  TO authenticated\n  USING (\n    EXISTS (\n      SELECT 1 FROM public.trip_members\n      WHERE trip_members.trip_id = messages.trip_id\n      AND trip_members.user_id = auth.uid()\n    )\n  );
+\n\nCREATE POLICY "Trip members can create messages"\n  ON public.messages FOR INSERT\n  TO authenticated\n  WITH CHECK (\n    auth.uid() = author_id\n    AND EXISTS (\n      SELECT 1 FROM public.trip_members\n      WHERE trip_members.trip_id = messages.trip_id\n      AND trip_members.user_id = auth.uid()\n    )\n  );
+\n\n-- RLS Policies for polls\nCREATE POLICY "Users can view polls for trips they are members of"\n  ON public.polls FOR SELECT\n  TO authenticated\n  USING (\n    EXISTS (\n      SELECT 1 FROM public.trip_members\n      WHERE trip_members.trip_id = polls.trip_id\n      AND trip_members.user_id = auth.uid()\n    )\n  );
+\n\nCREATE POLICY "Trip members can create polls"\n  ON public.polls FOR INSERT\n  TO authenticated\n  WITH CHECK (\n    auth.uid() = created_by\n    AND EXISTS (\n      SELECT 1 FROM public.trip_members\n      WHERE trip_members.trip_id = polls.trip_id\n      AND trip_members.user_id = auth.uid()\n    )\n  );
+\n\n-- RLS Policies for poll_options\nCREATE POLICY "Users can view poll options for trips they are members of"\n  ON public.poll_options FOR SELECT\n  TO authenticated\n  USING (\n    EXISTS (\n      SELECT 1 FROM public.polls\n      JOIN public.trip_members ON trip_members.trip_id = polls.trip_id\n      WHERE polls.id = poll_options.poll_id\n      AND trip_members.user_id = auth.uid()\n    )\n  );
+\n\nCREATE POLICY "Poll creators can add options"\n  ON public.poll_options FOR INSERT\n  TO authenticated\n  WITH CHECK (\n    EXISTS (\n      SELECT 1 FROM public.polls\n      WHERE polls.id = poll_options.poll_id\n      AND polls.created_by = auth.uid()\n    )\n  );
+\n\n-- RLS Policies for poll_votes\nCREATE POLICY "Users can view votes for trips they are members of"\n  ON public.poll_votes FOR SELECT\n  TO authenticated\n  USING (\n    EXISTS (\n      SELECT 1 FROM public.polls\n      JOIN public.trip_members ON trip_members.trip_id = polls.trip_id\n      WHERE polls.id = poll_votes.poll_id\n      AND trip_members.user_id = auth.uid()\n    )\n  );
+\n\nCREATE POLICY "Trip members can vote on polls"\n  ON public.poll_votes FOR INSERT\n  TO authenticated\n  WITH CHECK (\n    auth.uid() = user_id\n    AND EXISTS (\n      SELECT 1 FROM public.polls\n      JOIN public.trip_members ON trip_members.trip_id = polls.trip_id\n      WHERE polls.id = poll_votes.poll_id\n      AND trip_members.user_id = auth.uid()\n    )\n  );
+\n\nCREATE POLICY "Users can update their own votes"\n  ON public.poll_votes FOR UPDATE\n  TO authenticated\n  USING (auth.uid() = user_id)\n  WITH CHECK (auth.uid() = user_id);
+\n\nCREATE POLICY "Users can delete their own votes"\n  ON public.poll_votes FOR DELETE\n  TO authenticated\n  USING (auth.uid() = user_id);
+\n\n-- Function to automatically add trip owner as organizer\nCREATE OR REPLACE FUNCTION public.add_trip_owner_as_organizer()\nRETURNS TRIGGER AS $$\nBEGIN\n  INSERT INTO public.trip_members (trip_id, user_id, role)\n  VALUES (NEW.id, NEW.owner_id, 'organizer');
+\n  RETURN NEW;
+\nEND;
+\n$$ LANGUAGE plpgsql SECURITY DEFINER;
+\n\n-- Trigger to add owner as organizer when trip is created\nDROP TRIGGER IF EXISTS on_trip_created ON public.trips;
+\nCREATE TRIGGER on_trip_created\n  AFTER INSERT ON public.trips\n  FOR EACH ROW\n  EXECUTE FUNCTION public.add_trip_owner_as_organizer();
+;

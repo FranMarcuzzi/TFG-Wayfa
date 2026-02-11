@@ -1,0 +1,11 @@
+/*\n  # Add hotel support to activities\n\n  1. Changes to activities table\n    - Add `check_in_date` column for hotel check-in date\n    - Add `check_out_date` column for hotel check-out date\n    - Modify activity type CHECK constraint to include 'hotel'\n  \n  2. Purpose\n    - Allow activities to be marked as hotels with multi-day duration\n    - Hotels will appear "pinned" across all days from check-in to check-out\n    - Check-in/check-out times remain optional for more detailed timing\n*/\n\nDO $$\nBEGIN\n  IF NOT EXISTS (\n    SELECT 1 FROM information_schema.columns\n    WHERE table_name = 'activities' AND column_name = 'check_in_date'\n  ) THEN\n    ALTER TABLE public.activities ADD COLUMN check_in_date date;
+\n  END IF;
+\nEND $$;
+\n\nDO $$\nBEGIN\n  IF NOT EXISTS (\n    SELECT 1 FROM information_schema.columns\n    WHERE table_name = 'activities' AND column_name = 'check_out_date'\n  ) THEN\n    ALTER TABLE public.activities ADD COLUMN check_out_date date;
+\n  END IF;
+\nEND $$;
+\n\nDO $$\nBEGIN\n  ALTER TABLE public.activities DROP CONSTRAINT IF EXISTS activities_type_check;
+\n  ALTER TABLE public.activities \n    ADD CONSTRAINT activities_type_check \n    CHECK (type in ('food','museum','sightseeing','transport','hotel','other'));
+\nEXCEPTION WHEN others THEN\n  NULL;
+\nEND $$;
+;

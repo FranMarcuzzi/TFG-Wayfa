@@ -27,7 +27,7 @@ export default function DashboardPage() {
       if (detail === 'trips') setSectionsLoaded((s) => ({ ...s, trips: true }));
       if (detail === 'invitations') setSectionsLoaded((s) => ({ ...s, invitations: true }));
     };
-    try { window.addEventListener('dashboard-section-loaded', onSectionLoaded as any); } catch {}
+    try { window.addEventListener('dashboard-section-loaded', onSectionLoaded as any); } catch { }
     (async () => {
       try {
         const { data: { user } } = await supabase.auth.getUser();
@@ -36,14 +36,14 @@ export default function DashboardPage() {
         const full = (meta.full_name || meta.name || '') as string;
         const fallback = user?.email ? user.email.split('@')[0] : '';
         setUserName(full || fallback || '');
-      } catch {}
+      } catch { }
     })();
-    return () => { mounted = false; try { window.removeEventListener('dashboard-section-loaded', onSectionLoaded as any); } catch {} };
+    return () => { mounted = false; try { window.removeEventListener('dashboard-section-loaded', onSectionLoaded as any); } catch { } };
   }, []);
 
   return (
     <AuthGuard>
-      <div className="min-h-screen bg-gray-50 relative">
+      <div className="min-h-screen bg-background relative">
         {!(sectionsLoaded.trips && sectionsLoaded.invitations) && (
           <FullPageLoader />
         )}
@@ -52,8 +52,8 @@ export default function DashboardPage() {
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="flex items-start justify-between mb-8">
             <div>
-              <Reveal variant="slideUp"><h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight text-gray-900">{t('dashboard.welcome', { commaName: userName ? `, ${userName}` : '' })}</h1></Reveal>
-              <Reveal variant="fade" delayMs={70}><p className="text-gray-600 mt-3">{t('dashboard.ready')}</p></Reveal>
+              <Reveal variant="slideUp"><h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight text-foreground">{t('dashboard.welcome', { commaName: userName ? `, ${userName}` : '' })}</h1></Reveal>
+              <Reveal variant="fade" delayMs={70}><p className="text-muted-foreground mt-3">{t('dashboard.ready')}</p></Reveal>
             </div>
             <Reveal variant="slideIn" delayMs={120}>
               <Button onClick={() => setShowCreateModal(true)} className="mt-2 flex items-center gap-2 shadow-[0_6px_0_rgba(0,0,0,0.2)]">

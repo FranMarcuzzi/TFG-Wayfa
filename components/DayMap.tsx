@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef } from "react";
+import { useTheme } from "next-themes";
 
 type ActivityLite = {
   id: string;
@@ -26,6 +27,7 @@ export function DayMap({ activities, className, height = 260, centerHint = null,
   const mapboxRef = useRef<any>(null);
   const markersRef = useRef<any[]>([]);
   const lineIdRef = useRef<string | null>(null);
+  const { resolvedTheme } = useTheme();
 
   const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
 
@@ -72,7 +74,7 @@ export function DayMap({ activities, className, height = 260, centerHint = null,
 
       const map = new mapboxgl.Map({
         container: containerRef.current,
-        style: "mapbox://styles/mapbox/streets-v12",
+        style: resolvedTheme === 'dark' ? "mapbox://styles/mapbox/dark-v11" : "mapbox://styles/mapbox/streets-v12",
         center: centerHint ? [centerHint.lng, centerHint.lat] : [0, 20],
         zoom: centerHint ? 11 : 1.5,
       });
@@ -93,151 +95,157 @@ export function DayMap({ activities, className, height = 260, centerHint = null,
       try {
         markersRef.current.forEach((m) => m.remove());
         markersRef.current = [];
-      } catch {}
+      } catch { }
       if (mapRef.current) {
-        try { mapRef.current.remove(); } catch {}
+        try { mapRef.current.remove(); } catch { }
         mapRef.current = null;
       }
     };
-  }, [token]);
+}, [token]); // removed resolvedTheme from dependency to avoid re-init map
 
-  useEffect(() => {
-    renderMarkersAndRoute();
-  }, [points]);
+useEffect(() => {
+  if (mapRef.current && mapRef.current.setStyle) {
+    mapRef.current.setStyle(resolvedTheme === 'dark' ? "mapbox://styles/mapbox/dark-v11" : "mapbox://styles/mapbox/streets-v12");
+  }
+}, [resolvedTheme]);
 
-  function renderMarkersAndRoute() {
-    const map = mapRef.current;
-    if (!map) return;
-    if (!map.isStyleLoaded?.()) {
-      // try again shortly if the style isn't ready
-      setTimeout(renderMarkersAndRoute, 100);
-      return;
+useEffect(() => {
+  renderMarkersAndRoute();
+}, [points]);
+
+function renderMarkersAndRoute() {
+  const map = mapRef.current;
+  if (!map) return;
+  if (!map.isStyleLoaded?.()) {
+    // try again shortly if the style isn't ready
+    setTimeout(renderMarkersAndRoute, 100);
+    return;
+  }
+
+  // markers removed by request; no-op cleanup
+
+  // remove old route
+  if (lineIdRef.current && map.getLayer(lineIdRef.current)) {
+    try { map.removeLayer(lineIdRef.current); } catch { }
+  }
+  if (lineIdRef.current && map.getSource(lineIdRef.current)) {
+    try { map.removeSource(lineIdRef.current); } catch { }
+  }
+  lineIdRef.current = null;
+
+  // remove previous stops layer/source if exist
+  const stopsSrcId = 'day-stops-src';
+  const stopsLayerId = 'day-stops-circles';
+  if (map.getLayer(stopsLayerId)) {
+    try { map.removeLayer(stopsLayerId); } catch { }
+  }
+  if (map.getSource(stopsSrcId)) {
+    try { map.removeSource(stopsSrcId); } catch { }
+  }
+
+  if (!points || points.length === 0) {
+    if (centerHint) {
+      try { map.flyTo({ center: [centerHint.lng, centerHint.lat], zoom: 12 }); } catch { }
     }
+    return;
+  }
 
-    // markers removed by request; no-op cleanup
+  // small dots for stops (very subtle)
+  if (points.length >= 1) {
+    const stopsGeo = {
+      type: 'FeatureCollection',
+      features: points.map((p) => ({
+        type: 'Feature',
+        properties: { title: p.title },
+        geometry: { type: 'Point', coordinates: [p.lng, p.lat] },
+      })),
+    } as any;
+    map.addSource(stopsSrcId, { type: 'geojson', data: stopsGeo });
+    map.addLayer({
+      id: stopsLayerId,
+      type: 'circle',
+      source: stopsSrcId,
+      paint: {
+        'circle-radius': 3,
+        'circle-color': '#111827',
+        'circle-stroke-color': '#ffffff',
+        'circle-stroke-width': 1,
+        'circle-opacity': 0.9,
+      },
+    });
+  }
 
-    // remove old route
-    if (lineIdRef.current && map.getLayer(lineIdRef.current)) {
-      try { map.removeLayer(lineIdRef.current); } catch {}
-    }
-    if (lineIdRef.current && map.getSource(lineIdRef.current)) {
-      try { map.removeSource(lineIdRef.current); } catch {}
-    }
-    lineIdRef.current = null;
+  // draw road-snapped route using Mapbox Directions API (fallback to straight line)
+  if (points.length >= 2) {
+    const srcId = 'day-route-src';
+    const layerId = 'day-route-layer';
+    lineIdRef.current = layerId;
 
-    // remove previous stops layer/source if exist
-    const stopsSrcId = 'day-stops-src';
-    const stopsLayerId = 'day-stops-circles';
-    if (map.getLayer(stopsLayerId)) {
-      try { map.removeLayer(stopsLayerId); } catch {}
-    }
-    if (map.getSource(stopsSrcId)) {
-      try { map.removeSource(stopsSrcId); } catch {}
-    }
-
-    if (!points || points.length === 0) {
-      if (centerHint) {
-        try { map.flyTo({ center: [centerHint.lng, centerHint.lat], zoom: 12 }); } catch {}
+    const drawGeojson = (data: any) => {
+      if (map.getSource(srcId)) {
+        (map.getSource(srcId) as any).setData(data);
+      } else {
+        map.addSource(srcId, { type: 'geojson', data });
       }
-      return;
-    }
+      if (!map.getLayer(layerId)) {
+        map.addLayer({
+          id: layerId,
+          type: 'line',
+          source: srcId,
+          layout: { 'line-join': 'round', 'line-cap': 'round' },
+          paint: { 'line-color': '#2563eb', 'line-width': 4, 'line-opacity': 0.9 },
+        });
+      }
+    };
 
-    // small dots for stops (very subtle)
-    if (points.length >= 1) {
-      const stopsGeo = {
-        type: 'FeatureCollection',
-        features: points.map((p) => ({
-          type: 'Feature',
-          properties: { title: p.title },
-          geometry: { type: 'Point', coordinates: [p.lng, p.lat] },
-        })),
-      } as any;
-      map.addSource(stopsSrcId, { type: 'geojson', data: stopsGeo });
-      map.addLayer({
-        id: stopsLayerId,
-        type: 'circle',
-        source: stopsSrcId,
-        paint: {
-          'circle-radius': 3,
-          'circle-color': '#111827',
-          'circle-stroke-color': '#ffffff',
-          'circle-stroke-width': 1,
-          'circle-opacity': 0.9,
-        },
-      });
-    }
-
-    // draw road-snapped route using Mapbox Directions API (fallback to straight line)
-    if (points.length >= 2) {
-      const srcId = 'day-route-src';
-      const layerId = 'day-route-layer';
-      lineIdRef.current = layerId;
-
-      const drawGeojson = (data: any) => {
-        if (map.getSource(srcId)) {
-          (map.getSource(srcId) as any).setData(data);
-        } else {
-          map.addSource(srcId, { type: 'geojson', data });
-        }
-        if (!map.getLayer(layerId)) {
-          map.addLayer({
-            id: layerId,
-            type: 'line',
-            source: srcId,
-            layout: { 'line-join': 'round', 'line-cap': 'round' },
-            paint: { 'line-color': '#2563eb', 'line-width': 4, 'line-opacity': 0.9 },
-          });
-        }
-      };
-
-      (async () => {
-        try {
-          const coordsStr = points.map((p) => `${p.lng},${p.lat}`).join(';');
-          const accessToken = (mapboxRef.current as any).accessToken as string;
-          const url = `https://api.mapbox.com/directions/v5/mapbox/${profile}/${coordsStr}?geometries=geojson&overview=full&access_token=${encodeURIComponent(accessToken)}`;
-          const res = await fetch(url);
-          const json = await res.json();
-          const route = json?.routes?.[0]?.geometry;
-          const geojson = route
-            ? { type: 'Feature', properties: {}, geometry: route }
-            : {
-                type: 'Feature',
-                properties: {},
-                geometry: { type: 'LineString', coordinates: points.map((p) => [p.lng, p.lat]) },
-              };
-          drawGeojson(geojson);
-        } catch {
-          const fallback = {
+    (async () => {
+      try {
+        const coordsStr = points.map((p) => `${p.lng},${p.lat}`).join(';');
+        const accessToken = (mapboxRef.current as any).accessToken as string;
+        const url = `https://api.mapbox.com/directions/v5/mapbox/${profile}/${coordsStr}?geometries=geojson&overview=full&access_token=${encodeURIComponent(accessToken)}`;
+        const res = await fetch(url);
+        const json = await res.json();
+        const route = json?.routes?.[0]?.geometry;
+        const geojson = route
+          ? { type: 'Feature', properties: {}, geometry: route }
+          : {
             type: 'Feature',
             properties: {},
             geometry: { type: 'LineString', coordinates: points.map((p) => [p.lng, p.lat]) },
           };
-          drawGeojson(fallback);
-        }
-      })();
-    }
-
-    // fit to markers
-    try {
-      const bounds = new (mapboxRef.current as any).LngLatBounds();
-      for (let i = 0; i < points.length; i++) bounds.extend([points[i].lng, points[i].lat]);
-      if (points.length === 1) {
-        map.flyTo({ center: [points[0].lng, points[0].lat], zoom: 13 });
-      } else {
-        map.fitBounds(bounds, { padding: 40, animate: true, duration: 800 });
+        drawGeojson(geojson);
+      } catch {
+        const fallback = {
+          type: 'Feature',
+          properties: {},
+          geometry: { type: 'LineString', coordinates: points.map((p) => [p.lng, p.lat]) },
+        };
+        drawGeojson(fallback);
       }
-    } catch {}
+    })();
   }
 
-  return (
-    <div className={className} style={{ height }}>
-      {!token ? (
-        <div className="h-full bg-gray-100 flex items-center justify-center text-gray-500 text-sm">
-          Set NEXT_PUBLIC_MAPBOX_TOKEN in .env.local
-        </div>
-      ) : (
-        <div ref={containerRef} className="w-full h-full" />
-      )}
-    </div>
-  );
+  // fit to markers
+  try {
+    const bounds = new (mapboxRef.current as any).LngLatBounds();
+    for (let i = 0; i < points.length; i++) bounds.extend([points[i].lng, points[i].lat]);
+    if (points.length === 1) {
+      map.flyTo({ center: [points[0].lng, points[0].lat], zoom: 13 });
+    } else {
+      map.fitBounds(bounds, { padding: 40, animate: true, duration: 800 });
+    }
+  } catch { }
+}
+
+return (
+  <div className={className} style={{ height }}>
+    {!token ? (
+      <div className="h-full bg-muted flex items-center justify-center text-muted-foreground text-sm">
+        Set NEXT_PUBLIC_MAPBOX_TOKEN in .env.local
+      </div>
+    ) : (
+      <div ref={containerRef} className="w-full h-full" />
+    )}
+  </div>
+);
 }

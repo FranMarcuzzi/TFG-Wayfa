@@ -1,37 +1,9 @@
-/*
-  # Add Cover Image and Description to Trips
-
-  1. Changes to trips table
-    - Add `cover_url` (text, nullable) - URL to trip cover image
-    - Add `description` (text, nullable) - Trip description
-
-  2. Notes
-    - These fields are optional to maintain backwards compatibility
-    - Cover images can be stored in Supabase Storage or external URLs
-*/
-
--- Add cover_url column for trip images
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.columns
-    WHERE table_name = 'trips' AND column_name = 'cover_url'
-  ) THEN
-    ALTER TABLE public.trips ADD COLUMN cover_url TEXT;
-  END IF;
-END $$;
-
--- Add description column for trip details
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.columns
-    WHERE table_name = 'trips' AND column_name = 'description'
-  ) THEN
-    ALTER TABLE public.trips ADD COLUMN description TEXT;
-  END IF;
-END $$;
-
--- Add comment
-COMMENT ON COLUMN public.trips.cover_url IS 'URL to trip cover image (optional)';
-COMMENT ON COLUMN public.trips.description IS 'Trip description (optional)';
+/*\n  # Add Cover Image and Description to Trips\n\n  1. Changes to trips table\n    - Add `cover_url` (text, nullable) - URL to trip cover image\n    - Add `description` (text, nullable) - Trip description\n\n  2. Notes\n    - These fields are optional to maintain backwards compatibility\n    - Cover images can be stored in Supabase Storage or external URLs\n*/\n\n-- Add cover_url column for trip images\nDO $$\nBEGIN\n  IF NOT EXISTS (\n    SELECT 1 FROM information_schema.columns\n    WHERE table_name = 'trips' AND column_name = 'cover_url'\n  ) THEN\n    ALTER TABLE public.trips ADD COLUMN cover_url TEXT;
+\n  END IF;
+\nEND $$;
+\n\n-- Add description column for trip details\nDO $$\nBEGIN\n  IF NOT EXISTS (\n    SELECT 1 FROM information_schema.columns\n    WHERE table_name = 'trips' AND column_name = 'description'\n  ) THEN\n    ALTER TABLE public.trips ADD COLUMN description TEXT;
+\n  END IF;
+\nEND $$;
+\n\n-- Add comment\nCOMMENT ON COLUMN public.trips.cover_url IS 'URL to trip cover image (optional)';
+\nCOMMENT ON COLUMN public.trips.description IS 'Trip description (optional)';
+\n;

@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Plus, X, Check, Trash2 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
+import { useI18n } from '@/components/i18n/I18nProvider';
 
 interface PollOption {
   id: string;
@@ -33,6 +34,7 @@ interface PollsProps {
 }
 
 export function Polls({ tripId }: PollsProps) {
+  const { t } = useI18n();
   const [polls, setPolls] = useState<Poll[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -47,7 +49,7 @@ export function Polls({ tripId }: PollsProps) {
     loadPolls();
     subscribeToChanges();
     const t = setTimeout(() => { loadPolls(); }, 300);
-    return () => { try { clearTimeout(t); } catch {} };
+    return () => { try { clearTimeout(t); } catch { } };
   }, [tripId]);
 
   useEffect(() => {
@@ -127,14 +129,14 @@ export function Polls({ tripId }: PollsProps) {
                   .maybeSingle();
                 if (vote) userVote = (vote as any).option_id;
               }
-            } catch {}
+            } catch { }
 
             return {
               ...poll,
               options: optionsWithVotes,
               userVote,
               creator_name: poll.user_profiles?.display_name || null,
-              creator_email: poll.user_profiles?.email || 'Unknown',
+              creator_email: poll.user_profiles?.email || t('common.unknown'),
             };
           } catch {
             return {
@@ -142,7 +144,7 @@ export function Polls({ tripId }: PollsProps) {
               options: [],
               userVote: null,
               creator_name: poll.user_profiles?.display_name || null,
-              creator_email: poll.user_profiles?.email || 'Unknown',
+              creator_email: poll.user_profiles?.email || t('common.unknown'),
             };
           }
         })
@@ -201,17 +203,17 @@ export function Polls({ tripId }: PollsProps) {
 
   const createPoll = async () => {
     if (!newQuestion.trim()) {
-      toast({ variant: 'destructive', title: 'Missing question', description: 'Please enter a question' });
+      toast({ variant: 'destructive', title: t('polls.missingQuestionTitle'), description: t('polls.missingQuestionDesc') });
       return;
     }
     if (!currentUserId) {
-      toast({ variant: 'destructive', title: 'Not signed in', description: 'Please sign in to create a poll' });
+      toast({ variant: 'destructive', title: t('polls.notSignedInTitle'), description: t('polls.notSignedInDesc') });
       return;
     }
 
     const validOptions = newOptions.filter((opt) => opt.trim());
     if (validOptions.length < 2) {
-      toast({ variant: 'destructive', title: 'Add more options', description: 'Please add at least 2 options' });
+      toast({ variant: 'destructive', title: t('polls.addMoreOptionsTitle'), description: t('polls.addMoreOptionsDesc') });
       return;
     }
 
@@ -228,7 +230,7 @@ export function Polls({ tripId }: PollsProps) {
         .single();
 
       if (pollError || !poll) {
-        throw new Error(pollError?.message || 'Failed to create poll');
+        throw new Error(pollError?.message || t('polls.createFailedDesc'));
       }
 
       const optionsToInsert = validOptions.map((label) => ({
@@ -239,13 +241,13 @@ export function Polls({ tripId }: PollsProps) {
       const { error: optErr } = await supabase.from('poll_options').insert(optionsToInsert as any);
       if (optErr) throw optErr;
 
-      toast({ title: 'Poll created' });
+      toast({ title: t('polls.created') });
       setNewQuestion('');
       setNewOptions(['', '']);
       setShowCreateForm(false);
       await loadPolls();
     } catch (e: any) {
-      toast({ variant: 'destructive', title: 'Create failed', description: e?.message || 'Could not create poll' });
+      toast({ variant: 'destructive', title: t('polls.createFailedTitle'), description: e?.message || t('polls.createFailedDesc') });
     } finally {
       setCreating(false);
     }
@@ -287,10 +289,10 @@ export function Polls({ tripId }: PollsProps) {
       await supabase.from('poll_options').delete().eq('poll_id', pollId);
       const { error } = await supabase.from('polls').delete().eq('id', pollId);
       if (error) throw error;
-      toast({ title: 'Poll deleted' });
+      toast({ title: t('polls.deleted') });
       await loadPolls();
     } catch (e: any) {
-      toast({ variant: 'destructive', title: 'Delete failed', description: e?.message || 'Could not delete poll' });
+      toast({ variant: 'destructive', title: t('polls.deleteFailedTitle'), description: e?.message || t('polls.deleteFailedDesc') });
     } finally {
       setDeletingId(null);
     }
@@ -299,11 +301,11 @@ export function Polls({ tripId }: PollsProps) {
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
-        <h3 className="font-semibold text-gray-900">Polls</h3>
+        <h3 className="font-semibold text-foreground">{t('polls.title')}</h3>
         {!showCreateForm && (
           <Button onClick={() => setShowCreateForm(true)} size="sm" variant="outline">
             <Plus className="h-4 w-4 mr-2" />
-            New Poll
+            {t('polls.new')}
           </Button>
         )}
       </div>
@@ -311,7 +313,7 @@ export function Polls({ tripId }: PollsProps) {
       {showCreateForm && (
         <Card className="p-4 space-y-3">
           <Input
-            placeholder="Poll question"
+            placeholder={t('polls.questionPlaceholder')}
             value={newQuestion}
             onChange={(e) => setNewQuestion(e.target.value)}
           />
@@ -320,7 +322,7 @@ export function Polls({ tripId }: PollsProps) {
             {newOptions.map((option, index) => (
               <div key={index} className="flex gap-2">
                 <Input
-                  placeholder={`Option ${index + 1}`}
+                  placeholder={t('polls.optionPlaceholder', { n: index + 1 })}
                   value={option}
                   onChange={(e) => updateOption(index, e.target.value)}
                 />
@@ -340,13 +342,13 @@ export function Polls({ tripId }: PollsProps) {
           <div className="flex gap-2">
             <Button variant="outline" onClick={addOptionField} size="sm">
               <Plus className="h-4 w-4 mr-2" />
-              Add Option
+              {t('polls.addOption')}
             </Button>
           </div>
 
           <div className="flex gap-2">
             <Button onClick={createPoll} size="sm" disabled={creating}>
-              {creating ? 'Creating…' : 'Create Poll'}
+              {creating ? t('polls.creating') : t('polls.create')}
             </Button>
             <Button
               variant="outline"
@@ -357,15 +359,15 @@ export function Polls({ tripId }: PollsProps) {
               }}
               size="sm"
             >
-              Cancel
+              {t('polls.cancel')}
             </Button>
           </div>
         </Card>
       )}
 
       {polls.length === 0 ? (
-        <Card className="p-6 text-center text-gray-500">
-          No polls yet. Create one to get group input!
+        <Card className="p-6 text-center text-muted-foreground">
+          {t('polls.empty')}
         </Card>
       ) : (
         <div className="space-y-4">
@@ -376,9 +378,9 @@ export function Polls({ tripId }: PollsProps) {
               <Card key={poll.id} className="p-4">
                 <div className="mb-3 flex items-start justify-between gap-2">
                   <div>
-                    <h4 className="font-medium text-gray-900">{poll.question}</h4>
-                    <p className="text-xs text-gray-500 mt-1">
-                      Created by {poll.creator_name || poll.creator_email?.split('@')[0] || 'Unknown'}
+                    <h4 className="font-medium text-foreground">{poll.question}</h4>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {t('polls.createdBy', { name: poll.creator_name || poll.creator_email?.split('@')[0] || t('common.unknown') })}
                     </p>
                   </div>
                   <Button
@@ -386,9 +388,9 @@ export function Polls({ tripId }: PollsProps) {
                     size="icon"
                     onClick={() => deletePoll(poll.id)}
                     disabled={deletingId === poll.id}
-                    aria-label="Delete poll"
+                    aria-label={t('polls.deleteAria')}
                   >
-                    <Trash2 className="h-4 w-4 text-red-600" />
+                    <Trash2 className="h-4 w-4 text-destructive" />
                   </Button>
                 </div>
 
@@ -405,18 +407,17 @@ export function Polls({ tripId }: PollsProps) {
                       >
                         <div className="relative">
                           <div
-                            className={`absolute inset-0 rounded transition-all ${
-                              isUserVote ? 'bg-blue-100' : 'bg-gray-100'
-                            }`}
+                            className={`absolute inset-0 rounded transition-all ${isUserVote ? 'bg-blue-100 dark:bg-blue-900/30' : 'bg-muted'
+                              }`}
                             style={{ width: `${percentage}%` }}
                           />
                           <div className="relative p-3 flex items-center justify-between">
                             <div className="flex items-center gap-2">
-                              {isUserVote && <Check className="h-4 w-4 text-blue-600" />}
+                              {isUserVote && <Check className="h-4 w-4 text-primary" />}
                               <span className="font-medium">{option.label}</span>
                             </div>
                             <Badge variant="secondary">
-                              {option.votes} {option.votes === 1 ? 'vote' : 'votes'}
+                              {option.votes} {option.votes === 1 ? t('polls.vote') : t('polls.votes')}
                             </Badge>
                           </div>
                         </div>
@@ -425,8 +426,8 @@ export function Polls({ tripId }: PollsProps) {
                   })}
                 </div>
 
-                <div className="mt-3 text-sm text-gray-500">
-                  Total votes: {totalVotes}
+                <div className="mt-3 text-sm text-muted-foreground">
+                  {t('polls.totalVotes', { count: totalVotes })}
                 </div>
               </Card>
             );

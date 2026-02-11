@@ -33,23 +33,28 @@ function setCookie(name: string, value: string) {
 const ALL: Record<string, Messages> = { en, es } as const;
 
 export function I18nProvider({ children }: { children: React.ReactNode }) {
-  const initial = useMemo(() => {
-    if (typeof navigator !== "undefined") {
+  const [locale, setLocaleState] = useState<string>("en");
+
+  useEffect(() => {
+    // Client-side detection
+    let detected = "en";
+    try {
       const c = getCookie("lang");
       const fromCookie = c && ALL[c] ? c : null;
-      if (fromCookie) return fromCookie;
-      const nav = (navigator.language || "en").slice(0, 2).toLowerCase();
-      return ALL[nav] ? nav : "en";
-    }
-    return "en";
+      if (fromCookie) {
+        detected = fromCookie;
+      } else {
+        const nav = (navigator.language || "en").slice(0, 2).toLowerCase();
+        detected = ALL[nav] ? nav : "en";
+      }
+    } catch { }
+    setLocaleState(detected);
   }, []);
-
-  const [locale, setLocaleState] = useState<string>(initial);
 
   useEffect(() => {
     try {
       document.documentElement.lang = locale;
-    } catch {}
+    } catch { }
   }, [locale]);
 
   const setLocale = (loc: string) => {

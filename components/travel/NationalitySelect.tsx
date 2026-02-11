@@ -1,6 +1,7 @@
 "use client";
 
 import React from 'react';
+import { useI18n } from '@/components/i18n/I18nProvider';
 
 type Option = { code: string; name: string };
 
@@ -23,12 +24,13 @@ const DEFAULTS: Option[] = [
 ];
 
 export function NationalitySelect({ value, onChange, options = DEFAULTS }: { value: string; onChange: (v: string) => void; options?: Option[]; }) {
+  const { t } = useI18n();
   return (
     <div className="space-y-2">
-      <label className="text-sm font-medium text-gray-900">Nationality</label>
+      <label className="text-sm font-medium text-foreground">{t('travel.nationality')}</label>
       <div className="relative">
         <select
-          className="w-full appearance-none rounded-lg border border-gray-300 bg-white/90 px-3 py-2.5 pr-10 text-sm shadow-sm transition focus:border-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900 backdrop-blur"
+          className="w-full appearance-none rounded-lg border border-border bg-background/90 px-3 py-2.5 pr-10 text-sm shadow-sm transition focus:border-border focus:outline-none focus:ring-2 focus:ring-ring backdrop-blur"
           value={value}
           onChange={(e) => onChange(e.target.value)}
         >
@@ -37,7 +39,7 @@ export function NationalitySelect({ value, onChange, options = DEFAULTS }: { val
           ))}
         </select>
         <svg
-          className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500"
+          className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
           viewBox="0 0 20 20"
           fill="currentColor"
           aria-hidden="true"
