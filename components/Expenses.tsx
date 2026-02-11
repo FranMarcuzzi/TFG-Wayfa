@@ -84,9 +84,9 @@ export function Expenses({ tripId }: { tripId: string }) {
     if (!isFinite(n) || n <= 0 || !editTitle.trim()) return;
     const newCents = Math.round(n * 100);
     try {
-      const { error: upErr } = await supabase
-        .from('trip_expenses')
-        .update({ title: editTitle, amount_cents: newCents } as Record<string, unknown>)
+      const { error: upErr } = await (supabase
+        .from('trip_expenses') as any)
+        .update({ title: editTitle, amount_cents: newCents } as any)
         .eq('id', e.id);
       if (upErr) throw upErr;
 
