@@ -113,8 +113,8 @@ export function InvitationsList() {
       }
 
       // Update invitation status
-      const { error: inviteError } = await supabase
-        .from('trip_invitations')
+      const { error: inviteError } = await (supabase
+        .from('trip_invitations') as any)
         .update({ status: 'accepted' } as any)
         .eq('id', invitation.id);
 
@@ -148,8 +148,8 @@ export function InvitationsList() {
 
   const handleDecline = async (invitationId: string) => {
     try {
-      const { error } = await supabase
-        .from('trip_invitations')
+      const { error } = await (supabase
+        .from('trip_invitations') as any)
         .update({ status: 'declined' } as any)
         .eq('id', invitationId);
 
