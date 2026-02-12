@@ -121,8 +121,8 @@ export function CreateTaskForm({ tripId, onCancel, onSuccess }: CreateTaskFormPr
                 return;
             }
 
-            const { error } = await supabase
-                .from('tasks')
+            const { error } = await (supabase
+                .from('tasks') as any)
                 .insert({
                     trip_id: tripId,
                     title: values.title,
@@ -130,7 +130,7 @@ export function CreateTaskForm({ tripId, onCancel, onSuccess }: CreateTaskFormPr
                     assigned_to: assignedTo,
                     created_by: user.id,
                     status: 'todo'
-                });
+                } as any);
 
             if (error) throw error;
             onSuccess();
