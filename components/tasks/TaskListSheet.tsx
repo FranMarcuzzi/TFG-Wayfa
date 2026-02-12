@@ -67,7 +67,7 @@ export function TaskListSheet({ open, onOpenChange, tripId }: TaskListSheetProps
                     console.error("Error fetching profiles:", profilesError, "IDs:", assignedIds);
                 } else {
                     profilesMap = Object.fromEntries(
-                        (profilesData || []).map(p => [p.user_id, p])
+                        (profilesData || []).map((p: any) => [p.user_id, p])
                     );
                 }
             }
