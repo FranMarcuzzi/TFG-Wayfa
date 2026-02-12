@@ -88,7 +88,7 @@ export function TripMembers({ tripId }: TripMembersProps) {
           trip_id,
           user_id,
           role,
-          user_profiles!trip_members_user_id_fkey (
+          user_profiles!left (
             email,
             display_name
           )

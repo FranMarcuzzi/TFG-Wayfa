@@ -331,7 +331,32 @@ const es = {
   "expenses.expenseErrorTitle": "Error en el gasto",
   "expenses.splitErrorTitle": "Error al dividir",
   "expenses.updateFailed": "Error al actualizar el gasto",
-  "expenses.deleteFailed": "Error al eliminar el gasto"
+  "expenses.deleteFailed": "Error al eliminar el gasto",
+
+  "tasks.title": "Tareas",
+  "tasks.todo": "Por hacer",
+  "tasks.in_progress": "En progreso",
+  "tasks.done": "Hecho",
+  "tasks.new": "Nueva tarea",
+  "tasks.create": "Crear tarea",
+  "tasks.creating": "Creando...",
+  "tasks.cancel": "Cancelar",
+  "tasks.form.title": "Título",
+  "tasks.form.description": "Descripción (opcional)",
+  "tasks.form.assignedTo": "Asignado a",
+  "tasks.form.unassigned": "Sin asignar",
+  "tasks.form.assignedRequired": "El asignado es obligatorio",
+  "tasks.form.loadingMembers": "Cargando participantes...",
+  "tasks.form.noMembers": "No hay participantes",
+  "tasks.empty": "Aún no hay tareas. ¡Creá una para empezar!",
+  "tasks.delete": "Eliminar tarea",
+  "tasks.delete.confirm": "¿Seguro que querés eliminar esta tarea?",
+  "tasks.delete.success": "Tarea eliminada",
+  "tasks.delete.failed": "No se pudo eliminar la tarea",
+  "tasks.create.success": "Tarea creada",
+  "tasks.create.failed": "No se pudo crear la tarea",
+  "tasks.update.success": "Tarea actualizada",
+  "tasks.update.failed": "No se pudo actualizar la tarea"
 } as const;
 
 export default es;

@@ -5,12 +5,13 @@ import { supabase } from '@/lib/supabase/client';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Plus, Clock, MapPin, X, Sun, Plane, ThumbsUp, MessageCircle, Utensils, Landmark, Camera, Bus, Trash2, Calendar, BarChart3, Bed, Download, Edit } from 'lucide-react';
+import { Plus, Clock, MapPin, X, Sun, Plane, ThumbsUp, MessageCircle, Utensils, Landmark, Camera, Bus, Trash2, Calendar, BarChart3, Bed, Download, Edit, ListTodo } from 'lucide-react';
 import { Polls } from '@/components/Polls';
 import { TripMembers } from '@/components/TripMembers';
 import { DayMap } from '@/components/DayMap';
 import { Expenses } from '@/components/Expenses';
 import { Chat } from '@/components/Chat';
+import { TaskListSheet } from '@/components/tasks/TaskListSheet';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useI18n } from '@/components/i18n/I18nProvider';
@@ -282,6 +283,7 @@ export function Itinerary({ tripId }: ItineraryProps) {
   };
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isPollsOpen, setIsPollsOpen] = useState(false);
+  const [isTasksOpen, setIsTasksOpen] = useState(false);
   const [isExpensesOpen, setIsExpensesOpen] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [likesByActivity, setLikesByActivity] = useState<Record<string, { count: number; liked: boolean }>>({});
@@ -428,12 +430,60 @@ export function Itinerary({ tripId }: ItineraryProps) {
   };
 
   useEffect(() => {
+    const ensureTripMembership = async () => {
+      try {
+        const { data: authData } = await supabase.auth.getUser();
+        const user = authData.user;
+        if (!user?.id || !user.email) return;
+        const email = user.email.toLowerCase();
+
+        const { data: existing } = await (supabase.from('trip_members') as any)
+          .select('user_id')
+          .eq('trip_id', tripId)
+          .eq('user_id', user.id)
+          .maybeSingle();
+        if (existing) return;
+
+        const { data: invite } = await (supabase.from('trip_invitations') as any)
+          .select('id, status')
+          .eq('trip_id', tripId)
+          .eq('email', email)
+          .in('status', ['pending', 'accepted'])
+          .maybeSingle();
+        if (!invite) return;
+
+        await (supabase.from('user_profiles') as any).upsert({
+          user_id: user.id,
+          email,
+          display_name: (user.user_metadata as any)?.display_name || (user.user_metadata as any)?.full_name || email.split('@')[0],
+        }, { onConflict: 'user_id' });
+
+        const { error: insertErr } = await (supabase.from('trip_members') as any).insert({
+          trip_id: tripId,
+          user_id: user.id,
+          role: 'participant',
+        } as any);
+        if (insertErr && (insertErr as any).code !== '23505') {
+          console.error('Error inserting trip member:', insertErr);
+        }
+
+        if (invite.status === 'pending') {
+          await (supabase.from('trip_invitations') as any)
+            .update({ status: 'accepted' } as any)
+            .eq('id', invite.id);
+        }
+      } catch (e) {
+        console.error('Error ensuring trip membership:', e);
+      }
+    };
+
     loadDays();
     subscribeToChanges();
     loadTrip();
     supabase.auth.getUser().then(({ data }) => {
       if (data.user) setCurrentUserId(data.user.id);
     });
+    void ensureTripMembership();
   }, [tripId]);
 
   useEffect(() => {
@@ -2217,158 +2267,158 @@ export function Itinerary({ tripId }: ItineraryProps) {
                       return String(a.title || '').localeCompare(String(b.title || ''));
                     });
                     return ordered.map((activity: Activity) => (
-                    <Reveal key={activity.id} delayMs={0}>
-                      <div className="space-y-2">
-                        <Card className="p-0 overflow-hidden shadow-sm border-border">
-                          <div className="p-5 flex items-start gap-4">
-                            <div className="w-32 shrink-0">
-                              {activity.starts_at ? (
-                                <div className="flex w-full items-center justify-center gap-1 px-2 py-1 rounded-full bg-muted text-foreground text-xs">
-                                  <Clock className="h-3 w-3" />
-                                  <span>
-                                    {fmtHM(activity.starts_at)}{activity.ends_at ? ` - ${fmtHM(activity.ends_at)}` : ''}
-                                  </span>
-                                </div>
-                              ) : (
-                                <div className="flex w-full items-center justify-center gap-1 px-2 py-1 rounded-full bg-muted text-foreground text-xs">
-                                  <Clock className="h-3 w-3" />
-                                  <span>{t('itinerary.noTime')}</span>
-                                </div>
-                              )}
-                              {(() => {
-                                const t = (activity as any).type as string | undefined;
-                                const Icon =
-                                  t === 'food' ? Utensils :
-                                  t === 'museum' ? Landmark :
-                                  t === 'sightseeing' ? Camera :
-                                  t === 'transport' ? Bus :
-                                  t === 'hotel' ? Bed :
-                                  t === 'flight' ? Plane :
-                                  null;
-                                return Icon ? (
-                                  <div className="mt-2 h-16 w-full rounded-lg bg-muted/50 flex items-center justify-center">
-                                    <Icon className="h-8 w-8 text-muted-foreground" />
+                      <Reveal key={activity.id} delayMs={0}>
+                        <div className="space-y-2">
+                          <Card className="p-0 overflow-hidden shadow-sm border-border">
+                            <div className="p-5 flex items-start gap-4">
+                              <div className="w-32 shrink-0">
+                                {activity.starts_at ? (
+                                  <div className="flex w-full items-center justify-center gap-1 px-2 py-1 rounded-full bg-muted text-foreground text-xs">
+                                    <Clock className="h-3 w-3" />
+                                    <span>
+                                      {fmtHM(activity.starts_at)}{activity.ends_at ? ` - ${fmtHM(activity.ends_at)}` : ''}
+                                    </span>
                                   </div>
-                                ) : null;
-                              })()}
-                            </div>
-                            <div className="flex-1">
-                              <div className="flex items-start justify-between">
-                                <div>
-                                  <div className="flex items-center gap-2">
-                                    <div className="text-lg font-semibold text-foreground">{activity.title}</div>
-                                    {(activity as any).type === 'hotel' && (
-                                      <button
-                                        type="button"
-                                        onClick={() => openEditActivity(activity)}
-                                        className="inline-flex items-center rounded-full bg-amber-100 text-amber-800 text-xs font-semibold px-2 py-0.5 hover:bg-amber-200"
-                                        title={t('itinerary.editActivity')}
-                                      >
-                                        {t('itinerary.pinned')}
-                                      </button>
-                                    )}
+                                ) : (
+                                  <div className="flex w-full items-center justify-center gap-1 px-2 py-1 rounded-full bg-muted text-foreground text-xs">
+                                    <Clock className="h-3 w-3" />
+                                    <span>{t('itinerary.noTime')}</span>
                                   </div>
-                                  {activity.location && (
-                                    <div className="flex items-center gap-1 text-sm text-muted-foreground mt-1">
-                                      <MapPin className="h-3 w-3" />
-                                      {activity.location}
+                                )}
+                                {(() => {
+                                  const t = (activity as any).type as string | undefined;
+                                  const Icon =
+                                    t === 'food' ? Utensils :
+                                      t === 'museum' ? Landmark :
+                                        t === 'sightseeing' ? Camera :
+                                          t === 'transport' ? Bus :
+                                            t === 'hotel' ? Bed :
+                                              t === 'flight' ? Plane :
+                                                null;
+                                  return Icon ? (
+                                    <div className="mt-2 h-16 w-full rounded-lg bg-muted/50 flex items-center justify-center">
+                                      <Icon className="h-8 w-8 text-muted-foreground" />
                                     </div>
-                                  )}
-                                  {(activity as any).type === 'hotel' && (() => {
-                                    const r = getHotelRangeFromGroup(activity);
-                                    if (!r.start || !r.end) return null;
-                                    const label = `${r.start.toLocaleDateString()} – ${r.end.toLocaleDateString()}`;
-                                    return (
-                                      <div className="text-xs text-amber-700 mt-1">
-                                        {label}
-                                      </div>
-                                    );
-                                  })()}
-                                </div>
-                                {/* removed right-side type icon per UX request */}
+                                  ) : null;
+                                })()}
                               </div>
-                              <div className="flex items-center justify-between mt-4 text-sm text-muted-foreground">
-                                <div className="flex items-center gap-4">
-                                  <button className={`flex items-center gap-1 ${likesByActivity[activity.id]?.liked ? 'text-blue-500' : ''}`} onClick={() => toggleLike(activity.id)}>
-                                    <ThumbsUp className="h-4 w-4" />{likesByActivity[activity.id]?.count ?? 0}
-                                  </button>
-                                  <button className="flex items-center gap-1" onClick={() => toggleComments(activity.id)}>
-                                    <MessageCircle className="h-4 w-4" />{commentsCountByActivity[activity.id] ?? 0}
-                                  </button>
-                                </div>
-                                <div className="flex items-center gap-1">
-                                  <Button variant="ghost" size="sm" onClick={() => openEditActivity(activity)} title={t('common.edit')}>
-                                    <Edit className="h-4 w-4" />
-                                  </Button>
-                                  <Button variant="ghost" size="sm" onClick={() => deleteActivity(activity.id, activity)} title={t('common.delete')}>
-                                    <X className="h-4 w-4" />
-                                  </Button>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        </Card>
-                        {openCommentsFor[activity.id] && (
-                          <Card className="p-4">
-                            <div className="space-y-3">
-                              <div className="space-y-2 max-h-52 overflow-auto">
-                                {(commentsByActivity[activity.id] || []).map((c) => {
-                                  const isUrl = typeof c.content === 'string' && /^https?:\/\//i.test(c.content);
-                                  const lower = (c.content || '').toLowerCase();
-                                  const isImage = isUrl && (lower.endsWith('.png') || lower.endsWith('.jpg') || lower.endsWith('.jpeg') || lower.endsWith('.gif') || lower.endsWith('.webp'));
-                                  const isVideo = isUrl && (lower.endsWith('.mp4') || lower.endsWith('.webm') || lower.endsWith('.ogg'));
-                                  const isAudio = isUrl && (lower.endsWith('.mp3') || lower.endsWith('.wav') || lower.endsWith('.m4a') || lower.endsWith('.ogg'));
-                                  return (
-                                    <div key={c.id} className="text-sm space-y-1">
-                                      <div className="text-foreground font-medium">{c.user_name || (c.user_email ? c.user_email.split('@')[0] : t('itinerary.user'))}</div>
-                                      {isUrl ? (
-                                        isImage ? (
-                                          <a href={c.content} target="_blank" rel="noreferrer" className="block">
-                                            <img src={c.content} alt="attachment" className="max-h-48 rounded border" />
-                                          </a>
-                                        ) : isVideo ? (
-                                          <video controls className="max-h-64 rounded border">
-                                            <source src={c.content} />
-                                          </video>
-                                        ) : isAudio ? (
-                                          <audio controls className="w-full">
-                                            <source src={c.content} />
-                                          </audio>
-                                        ) : (
-                                          <a href={c.content} target="_blank" rel="noreferrer" className="text-blue-500 underline break-all">{c.content}</a>
-                                        )
-                                      ) : (
-                                        <div className="text-muted-foreground break-words">{c.content}</div>
+                              <div className="flex-1">
+                                <div className="flex items-start justify-between">
+                                  <div>
+                                    <div className="flex items-center gap-2">
+                                      <div className="text-lg font-semibold text-foreground">{activity.title}</div>
+                                      {(activity as any).type === 'hotel' && (
+                                        <button
+                                          type="button"
+                                          onClick={() => openEditActivity(activity)}
+                                          className="inline-flex items-center rounded-full bg-amber-100 text-amber-800 text-xs font-semibold px-2 py-0.5 hover:bg-amber-200"
+                                          title={t('itinerary.editActivity')}
+                                        >
+                                          {t('itinerary.pinned')}
+                                        </button>
                                       )}
                                     </div>
-                                  );
-                                })}
-                              </div>
-                              <div className="flex gap-2">
-                                <Input
-                                  placeholder={t('itinerary.commentPlaceholder')}
-                                  value={newCommentByActivity[activity.id] || ''}
-                                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewCommentByActivity((prev) => ({ ...prev, [activity.id]: e.target.value }))}
-                                />
-                                <Button size="sm" onClick={() => addComment(activity.id)} disabled={!(newCommentByActivity[activity.id] || '').trim()}>{t('common.send')}</Button>
-                                <label className="inline-flex items-center justify-center px-3 text-sm border rounded-md cursor-pointer bg-card">
-                                  <input
-                                    type="file"
-                                    className="hidden"
-                                    onChange={(e) => {
-                                      const f = e.target.files?.[0];
-                                      if (f) uploadMedia(activity.id, f);
-                                    }}
-                                    accept="image/*,video/*,audio/*,application/pdf"
-                                  />
-                                  {mediaUploadingByActivity[activity.id] ? t('common.loading') : t('common.upload')}
-                                </label>
+                                    {activity.location && (
+                                      <div className="flex items-center gap-1 text-sm text-muted-foreground mt-1">
+                                        <MapPin className="h-3 w-3" />
+                                        {activity.location}
+                                      </div>
+                                    )}
+                                    {(activity as any).type === 'hotel' && (() => {
+                                      const r = getHotelRangeFromGroup(activity);
+                                      if (!r.start || !r.end) return null;
+                                      const label = `${r.start.toLocaleDateString()} – ${r.end.toLocaleDateString()}`;
+                                      return (
+                                        <div className="text-xs text-amber-700 mt-1">
+                                          {label}
+                                        </div>
+                                      );
+                                    })()}
+                                  </div>
+                                  {/* removed right-side type icon per UX request */}
+                                </div>
+                                <div className="flex items-center justify-between mt-4 text-sm text-muted-foreground">
+                                  <div className="flex items-center gap-4">
+                                    <button className={`flex items-center gap-1 ${likesByActivity[activity.id]?.liked ? 'text-blue-500' : ''}`} onClick={() => toggleLike(activity.id)}>
+                                      <ThumbsUp className="h-4 w-4" />{likesByActivity[activity.id]?.count ?? 0}
+                                    </button>
+                                    <button className="flex items-center gap-1" onClick={() => toggleComments(activity.id)}>
+                                      <MessageCircle className="h-4 w-4" />{commentsCountByActivity[activity.id] ?? 0}
+                                    </button>
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    <Button variant="ghost" size="sm" onClick={() => openEditActivity(activity)} title={t('common.edit')}>
+                                      <Edit className="h-4 w-4" />
+                                    </Button>
+                                    <Button variant="ghost" size="sm" onClick={() => deleteActivity(activity.id, activity)} title={t('common.delete')}>
+                                      <X className="h-4 w-4" />
+                                    </Button>
+                                  </div>
+                                </div>
                               </div>
                             </div>
                           </Card>
-                        )}
-                      </div>
-                    </Reveal>
+                          {openCommentsFor[activity.id] && (
+                            <Card className="p-4">
+                              <div className="space-y-3">
+                                <div className="space-y-2 max-h-52 overflow-auto">
+                                  {(commentsByActivity[activity.id] || []).map((c) => {
+                                    const isUrl = typeof c.content === 'string' && /^https?:\/\//i.test(c.content);
+                                    const lower = (c.content || '').toLowerCase();
+                                    const isImage = isUrl && (lower.endsWith('.png') || lower.endsWith('.jpg') || lower.endsWith('.jpeg') || lower.endsWith('.gif') || lower.endsWith('.webp'));
+                                    const isVideo = isUrl && (lower.endsWith('.mp4') || lower.endsWith('.webm') || lower.endsWith('.ogg'));
+                                    const isAudio = isUrl && (lower.endsWith('.mp3') || lower.endsWith('.wav') || lower.endsWith('.m4a') || lower.endsWith('.ogg'));
+                                    return (
+                                      <div key={c.id} className="text-sm space-y-1">
+                                        <div className="text-foreground font-medium">{c.user_name || (c.user_email ? c.user_email.split('@')[0] : t('itinerary.user'))}</div>
+                                        {isUrl ? (
+                                          isImage ? (
+                                            <a href={c.content} target="_blank" rel="noreferrer" className="block">
+                                              <img src={c.content} alt="attachment" className="max-h-48 rounded border" />
+                                            </a>
+                                          ) : isVideo ? (
+                                            <video controls className="max-h-64 rounded border">
+                                              <source src={c.content} />
+                                            </video>
+                                          ) : isAudio ? (
+                                            <audio controls className="w-full">
+                                              <source src={c.content} />
+                                            </audio>
+                                          ) : (
+                                            <a href={c.content} target="_blank" rel="noreferrer" className="text-blue-500 underline break-all">{c.content}</a>
+                                          )
+                                        ) : (
+                                          <div className="text-muted-foreground break-words">{c.content}</div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                                <div className="flex gap-2">
+                                  <Input
+                                    placeholder={t('itinerary.commentPlaceholder')}
+                                    value={newCommentByActivity[activity.id] || ''}
+                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewCommentByActivity((prev) => ({ ...prev, [activity.id]: e.target.value }))}
+                                  />
+                                  <Button size="sm" onClick={() => addComment(activity.id)} disabled={!(newCommentByActivity[activity.id] || '').trim()}>{t('common.send')}</Button>
+                                  <label className="inline-flex items-center justify-center px-3 text-sm border rounded-md cursor-pointer bg-card">
+                                    <input
+                                      type="file"
+                                      className="hidden"
+                                      onChange={(e) => {
+                                        const f = e.target.files?.[0];
+                                        if (f) uploadMedia(activity.id, f);
+                                      }}
+                                      accept="image/*,video/*,audio/*,application/pdf"
+                                    />
+                                    {mediaUploadingByActivity[activity.id] ? t('common.loading') : t('common.upload')}
+                                  </label>
+                                </div>
+                              </div>
+                            </Card>
+                          )}
+                        </div>
+                      </Reveal>
                     ));
                   })()}
                 </div>
@@ -2589,8 +2639,16 @@ export function Itinerary({ tripId }: ItineraryProps) {
         </div>
       </div>
 
-      {/* Floating launchers: Polls (above) and Chat (below) */}
+      {/* Floating launchers: Tasks (top), Polls (middle), and Chat (bottom) */}
       <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-3">
+        <Button
+          className="relative rounded-full shadow-lg h-12 w-12 p-0"
+          size="icon"
+          onClick={() => setIsTasksOpen((v) => !v)}
+          aria-label={t('tasks.title')}
+        >
+          <ListTodo className="h-5 w-5" />
+        </Button>
         <Button
           className="relative rounded-full shadow-lg h-12 w-12 p-0"
           size="icon"
@@ -2625,6 +2683,9 @@ export function Itinerary({ tripId }: ItineraryProps) {
           </div>
         </div>
       )}
+
+      {/* Compact bottom-right tasks box (stacked above polls) */}
+      <TaskListSheet open={isTasksOpen} onOpenChange={setIsTasksOpen} tripId={tripId} />
 
       {/* Compact bottom-right polls box (stacked a bit higher) */}
       {isPollsOpen && (

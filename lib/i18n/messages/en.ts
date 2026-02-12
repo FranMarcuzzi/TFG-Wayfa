@@ -332,7 +332,32 @@ const en = {
   "expenses.expenseErrorTitle": "Expense error",
   "expenses.splitErrorTitle": "Split error",
   "expenses.updateFailed": "Error updating expense",
-  "expenses.deleteFailed": "Error deleting expense"
+  "expenses.deleteFailed": "Error deleting expense",
+
+  "tasks.title": "Tasks",
+  "tasks.todo": "To Do",
+  "tasks.in_progress": "In Progress",
+  "tasks.done": "Done",
+  "tasks.new": "New Task",
+  "tasks.create": "Create Task",
+  "tasks.creating": "Creating...",
+  "tasks.cancel": "Cancel",
+  "tasks.form.title": "Title",
+  "tasks.form.description": "Description (optional)",
+  "tasks.form.assignedTo": "Assigned to",
+  "tasks.form.unassigned": "Unassigned",
+  "tasks.form.assignedRequired": "Assignee is required",
+  "tasks.form.loadingMembers": "Loading participants...",
+  "tasks.form.noMembers": "No participants found",
+  "tasks.empty": "No tasks yet. Create one to get started!",
+  "tasks.delete": "Delete task",
+  "tasks.delete.confirm": "Are you sure you want to delete this task?",
+  "tasks.delete.success": "Task deleted",
+  "tasks.delete.failed": "Failed to delete task",
+  "tasks.create.success": "Task created",
+  "tasks.create.failed": "Failed to create task",
+  "tasks.update.success": "Task updated",
+  "tasks.update.failed": "Failed to update task"
 } as const;
 
 export default en;

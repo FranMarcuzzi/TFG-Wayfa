@@ -275,6 +275,38 @@ export type Database = {
           expires_at?: string;
         };
       };
+      tasks: {
+        Row: {
+          id: string;
+          trip_id: string;
+          title: string;
+          description: string | null;
+          status: 'todo' | 'in_progress' | 'done';
+          assigned_to: string | null;
+          created_by: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          trip_id: string;
+          title: string;
+          description?: string | null;
+          status?: 'todo' | 'in_progress' | 'done';
+          assigned_to?: string | null;
+          created_by: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          trip_id?: string;
+          title?: string;
+          description?: string | null;
+          status?: 'todo' | 'in_progress' | 'done';
+          assigned_to?: string | null;
+          created_by?: string;
+          created_at?: string;
+        };
+      };
       user_profiles: {
         Row: {
           user_id: string;
