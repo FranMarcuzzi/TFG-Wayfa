@@ -33,8 +33,8 @@ export function TaskListSheet({ open, onOpenChange, tripId }: TaskListSheetProps
         setLoading(true);
         try {
             // First, fetch all tasks
-            const { data: tasksData, error: tasksError } = await supabase
-                .from('tasks')
+            const { data: tasksData, error: tasksError } = await (supabase
+                .from('tasks') as any)
                 .select('*')
                 .eq('trip_id', tripId)
                 .order('created_at', { ascending: false });
@@ -49,7 +49,7 @@ export function TaskListSheet({ open, onOpenChange, tripId }: TaskListSheetProps
             // Get unique assigned_to IDs (excluding null)
             const assignedIds = Array.from(
                 new Set(
-                    (tasksData || [])
+                    (tasksData as any[] || [])
                         .map(t => t.assigned_to)
                         .filter(Boolean)
                 )
@@ -58,8 +58,8 @@ export function TaskListSheet({ open, onOpenChange, tripId }: TaskListSheetProps
             // Fetch user profiles for assigned users
             let profilesMap: Record<string, any> = {};
             if (assignedIds.length > 0) {
-                const { data: profilesData, error: profilesError } = await supabase
-                    .from('user_profiles')
+                const { data: profilesData, error: profilesError } = await (supabase
+                    .from('user_profiles') as any)
                     .select('user_id, display_name, email')
                     .in('user_id', assignedIds);
 
@@ -73,7 +73,7 @@ export function TaskListSheet({ open, onOpenChange, tripId }: TaskListSheetProps
             }
 
             // Merge tasks with profiles
-            const tasksWithProfiles = (tasksData || []).map(task => ({
+            const tasksWithProfiles = (tasksData as any[] || []).map(task => ({
                 ...task,
                 assigned_user: task.assigned_to ? profilesMap[task.assigned_to] || null : null
             }));
