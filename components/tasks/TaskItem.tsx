@@ -51,9 +51,9 @@ export function TaskItem({ task, onUpdate }: TaskItemProps) {
         if (status === task.status) return;
         setUpdating(true);
         try {
-            const { error } = await supabase
-                .from('tasks')
-                .update({ status })
+            const { error } = await (supabase
+                .from('tasks') as any)
+                .update({ status } as any)
                 .eq('id', task.id);
 
             if (error) throw error;
