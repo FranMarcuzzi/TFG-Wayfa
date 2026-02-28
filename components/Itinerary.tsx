@@ -1190,16 +1190,11 @@ export function Itinerary({ tripId }: ItineraryProps) {
       // Cover/header
       doc.setFillColor(0, 0, 0);
       doc.rect(0, 0, pageW, headerH, 'F');
-      const logo = await getLogoData();
-      const logoW = 96;
-      const logoH = logo.width > 0 ? (logoW * logo.height) / logo.width : 32;
-      const logoY = Math.max(8, (headerH - logoH) / 2);
-      doc.setFillColor(255, 255, 255);
-      doc.roundedRect(marginX - 6, logoY - 4, logoW + 12, logoH + 8, 6, 6, 'F');
-      doc.addImage(logo.dataUrl, 'PNG', marginX, logoY, logoW, logoH);
       doc.setTextColor(255, 255, 255);
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(16);
+      doc.text('Wayfa', marginX, 28);
+
       doc.setFontSize(12);
       doc.setFont('helvetica', 'normal');
       const titleLines = doc.splitTextToSize(tripTitle, pageW - marginX * 2 - 140);
